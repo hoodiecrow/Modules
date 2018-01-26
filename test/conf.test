@@ -1,0 +1,55 @@
+package require tcltest
+namespace import ::tcltest::*
+
+::tcltest::configure {*}$argv
+
+::tcltest::testConstraint skip 0
+::tcltest::testConstraint noskip 1
+
+::tcltest::loadTestedCommands
+
+package require conf
+
+# NOTE viewFile suppresses ending newline
+
+test conf-1.0 {} -setup {
+    catch {package forget msgcat}
+    set res {}
+} -body {
+    lappend res [info commands ::mc]
+    conf msgcat
+    lappend res [interp alias {} ::mc]
+} -cleanup {
+    log::lvSuppressLE i 1
+    interp alias {} ::mc {}
+} -result {{} format}
+
+
+test conf-1.1 {} -setup {
+    package require msgcat
+    set res {}
+} -body {
+    lappend res [info commands ::mc]
+    conf msgcat
+    lappend res [interp alias {} ::mc]
+    lappend res [info body ::mc]
+} -cleanup {
+    log::lvSuppressLE i 1
+    rename ::mc {}
+} -result {{} {} {namespace eval :: [list ::msgcat::mc {*}$args]}}
+
+
+test conf-1.2 {} -setup {
+    package require msgcat
+    set res {}
+} -body {
+    lappend res [info commands ::mc]
+    namespace eval ::foo {conf msgcat}
+    lappend res [interp alias {} ::mc]
+    lappend res [info body ::mc]
+} -cleanup {
+    log::lvSuppressLE i 1
+} -result {{} {} {namespace eval ::foo [list ::msgcat::mc {*}$args]}}
+
+
+::tcltest::cleanupTests

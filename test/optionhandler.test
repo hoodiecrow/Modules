@@ -1,0 +1,315 @@
+package require log
+package require tcltest
+namespace import ::tcltest::*
+
+configure {*}$argv
+
+loadTestedCommands
+
+package require log
+if {[llength [info commands mc]] < 1} {
+    interp alias {} mc {} format
+}
+
+set auto_path [linsert $auto_path 0 .]
+::tcl::tm::path add .
+
+package require optionhandler
+
+proc getResult words {
+    global options
+    list [lmap name [lsort [array names options]] {array get options $name}] $words
+}
+
+test optionHandler-1.0 {running empty} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    list [$o extract ::options] [info exists ::options]
+} -cleanup {
+    unset options
+    $o destroy
+} -result {{} 1}
+
+test optionHandler-1.1 {running empty, non-existing array} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    getResult [$o extract ::options]
+} -cleanup {
+    unset options
+    $o destroy
+} -result {{} {}}
+
+test optionHandler-1.2 {non-existing array, non-option arguments} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    getResult [$o extract ::options foo bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+} -result {{} {foo bar baz}}
+
+test optionHandler-1.3 {non-existing array, breaking argument} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    getResult [$o extract ::options -- -bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+} -result {{} {-bar baz}}
+
+test optionHandler-1.4 {default option values} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -abc default 1
+    $o option -abd default 2
+    $o option -def default 3
+    getResult [$o extract ::options -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-abc 1} {-abd 2} {-def 3}} {bar baz}}
+
+#package forget optionhandler ; cleanupTests ; return
+
+test optionHandler-1.5 {default option values, one option given} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -abc default 1
+    $o option -abd default 2
+    $o option -def default 3
+    getResult [$o extract ::options -abc 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+} -result {{{-abc 99} {-abd 2} {-def 3}} {bar baz}}
+
+test optionHandler-1.6 {overabbreviated option name} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -abc default 1
+    $o option -abd default 2
+    $o option -def default 3
+    getResult [$o extract ::options -ab 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {ambiguous option "-ab": must be -abc, -abd, or -def} -returnCodes error
+
+test optionHandler-1.7 {abbreviated option name} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -abc default 1
+    $o option -abd default 2
+    $o option -def default 3
+    getResult [$o extract ::options -d 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-abc 1} {-abd 2} {-def 99}} {bar baz}}
+
+test optionHandler-1.8 {added options} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -abc default 1
+    $o option -abd default 2
+    $o option -def default 3
+    $o option -foo
+    $o option -bar
+    getResult [$o extract ::options -bar 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-abc 1} {-abd 2} {-bar 99} {-def 3}} {bar baz}}
+
+test optionHandler-1.9 {bad option} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -abc default 1
+    $o option -abd default 2
+    $o option -def default 3
+    getResult [$o extract ::options -bar 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {bad option "-bar": must be -abc, -abd, or -def} -returnCodes error
+
+test optionHandler-1.10 {option processing} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar default 77
+    getResult [$o extract ::options -bar 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 99}} {bar baz}}
+
+test optionHandler-1.11 {flag option} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar default 77 flag 1
+    $o option -foo
+    getResult [$o extract ::options -bar -foo 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 1} {-foo 99}} {bar baz}}
+
+test optionHandler-1.12 {inverting flag option} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar default 77 flag 1
+    $o option -foo
+    getResult [$o extract ::options -no-bar -foo 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 0} {-foo 99}} {bar baz}}
+
+test optionHandler-1.13 {flag default} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar flag 1
+    $o option -foo
+    getResult [$o extract ::options -foo 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 0} {-foo 99}} {bar baz}}
+
+test optionHandler-1.14 {flag default} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar flag 1 default 1
+    $o option -foo
+    getResult [$o extract ::options -foo 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 1} {-foo 99}} {bar baz}}
+
+test optionHandler-1.15 {added option with default} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar default 77
+    getResult [$o extract ::options -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 77}} {bar baz}}
+
+if no {
+test optionHandler-1.16 {unknown option key -- v1.0} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar foo 77
+    getResult [$o extract ::options -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {option "-bar": unknown option key "foo"} -returnCodes error
+}
+
+test optionHandler-1.16 {unknown option key -- v1.1} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -bar foo 77
+    getResult [$o extract ::options -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{} {bar baz}}
+
+test optionHandler-1.17 {usage message} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -foo doc "Lorem ipsum dolor sit amet"
+    $o option -bar doc "Consectetur adipiscing elit"
+    $o option -baz doc "Sed vulputate diam vel mollis porttitor"
+    $o usage "foobar ?options? filename"
+} -cleanup {
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {foobar ?options? filename
+Options:
+-bar	Consectetur adipiscing elit
+-baz	Sed vulputate diam vel mollis porttitor
+-foo	Lorem ipsum dolor sit amet
+}
+
+test optionHandler-1.18 {undefined options} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    getResult [$o extract ::options -foo x -bar 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 99} {-foo x}} {bar baz}}
+
+test optionHandler-1.19 {usage message triggered by option} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -foo doc "Lorem ipsum dolor sit amet"
+    $o option -bar doc "Consectetur adipiscing elit"
+    $o option -baz doc "Sed vulputate diam vel mollis porttitor"
+    getResult [$o extract ::options -foo x -bar 99 -? -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 99} {-foo x}} {
+Options:
+-bar	Consectetur adipiscing elit
+-baz	Sed vulputate diam vel mollis porttitor
+-foo	Lorem ipsum dolor sit amet
+}}
+
+test optionHandler-1.20 {usage message triggered by option} -setup {
+    set o [OptionHandler new -useassertions]
+} -body {
+    $o option -foo doc "Lorem ipsum dolor sit amet"
+    $o option -bar doc "Consectetur adipiscing elit"
+    $o option -baz doc "Sed vulputate diam vel mollis porttitor"
+    getResult [$o extract ::options -foo x -help -bar 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-foo x}} {
+Options:
+-bar	Consectetur adipiscing elit
+-baz	Sed vulputate diam vel mollis porttitor
+-foo	Lorem ipsum dolor sit amet
+}}
+
+test optionHandler-1.21 {options in constructor} -setup {
+} -body {
+    set o [OptionHandler new -useassertions {*}{
+        {-abc default 1}
+        {-abd default 2}
+        {-def default 3}
+        -foo
+        -bar
+    }]
+    getResult [$o extract ::options -bar 99 -- bar baz]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-abc 1} {-abd 2} {-bar 99} {-def 3}} {bar baz}}
+
+# This test batch is usually run in tkcon, so make it reload the package.
+package forget optionhandler ; cleanupTests ; return
