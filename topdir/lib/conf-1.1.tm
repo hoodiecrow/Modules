@@ -5,7 +5,7 @@ oo::objdefine conf {
     method setdir {} {set dir [file dirname [info script]]}
     method msgcat args {
         if {![namespace exists ::starkit] || ![info exists starkit::topdir]} {
-            namespace eval ::starkit [list set topdir [file dirname $dir]]
+            namespace eval ::starkit [list variable topdir [file dirname $dir]]
         }
         if {[catch {package present msgcat}]} {
             interp alias {} ::mc {} format
