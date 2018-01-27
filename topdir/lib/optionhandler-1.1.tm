@@ -53,6 +53,10 @@ oo::class create OptionHandler {
         }
     }
 
+    method expand {opt values} {
+        set $varName\($opt) [::tcl::prefix match -message value $values [set $varName\($opt)]]
+    }
+
     method GetTable {} {
         my assert {[info exists data]}
         lsort -dictionary -unique [dict keys $data]
