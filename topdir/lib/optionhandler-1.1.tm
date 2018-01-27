@@ -1,25 +1,4 @@
-# Clean up in case package is reloaded.
-catch {AssertionHandler destroy}
-catch {OptionHandler destroy}
-
-oo::class create AssertionHandler {
-    constructor args {
-        if {[lindex $args 0] eq "-useassertions"} {
-            set args [lrange $args 1 end]
-            oo::objdefine [self] forward assert my Assert
-        } else {
-            oo::objdefine [self] method assert args {}
-        }
-        next {*}$args
-    }
-
-    method Assert expr {
-        if {![uplevel 1 [list expr $expr]]} {
-            return -code error "Assertion failed: $expr"
-        }
-    }
-
-}
+package require assertionhandler
 
 oo::class create OptionHandler {
     mixin AssertionHandler

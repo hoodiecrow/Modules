@@ -1,4 +1,3 @@
-package require log
 package require tcltest
 namespace import ::tcltest::*
 
@@ -6,13 +5,9 @@ configure {*}$argv
 
 loadTestedCommands
 
-package require log
 if {[llength [info commands mc]] < 1} {
     interp alias {} mc {} format
 }
-
-set auto_path [linsert $auto_path 0 .]
-::tcl::tm::path add .
 
 package require optionhandler
 
