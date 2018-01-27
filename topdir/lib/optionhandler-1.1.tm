@@ -2,7 +2,7 @@ package require assertionhandler
 
 oo::class create OptionHandler {
     mixin AssertionHandler
-    variable data table
+    variable data table varName
 
     constructor args {
         set data {}
@@ -27,6 +27,7 @@ oo::class create OptionHandler {
         my assert {![info exists $name]}
         #my assert {[llength $args] > 0}
         array set $name {}
+        set varName $name
         my AddDefaults $name
         my ProcessCmdLine $name {*}$args
     }
@@ -41,6 +42,19 @@ oo::class create OptionHandler {
             }
         }
         return $prefix\nOptions:\n[join [lsort -dictionary $docs] \n]\n
+    }
+
+    method defaultTo {opt1 opt2} {
+        # TODO decide if should fail if opt2 not present
+        if {![info exists $varName\($opt1)]} {
+            if {[info exists $varName\($opt2)]} {
+                set $varName\($opt1) [set $varName\($opt2)]
+            }
+        }
+    }
+
+    method expand {opt values} {
+        set $varName\($opt) [::tcl::prefix match -message value $values [set $varName\($opt)]]
     }
 
     method GetTable {} {

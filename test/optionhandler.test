@@ -319,4 +319,72 @@ test optionHandler-2.0 {long option aware negation} -setup {
     log::lvSuppressLE i 1
 } -result {{{--abd 0} {-abc 0}} {}}
 
+test optionHandler-2.1 {remember variable name} -setup {
+} -body {
+    set o [OptionHandler new -useassertions]
+    oo::objdefine $o export variable
+    $o variable varName
+    set varName
+} -cleanup {
+    unset -nocomplain options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {can't read "varName": no such variable} -returnCodes error
+
+test optionHandler-2.2 {remember variable name} -setup {
+} -body {
+    set o [OptionHandler new -useassertions]
+    $o extract ::options -foo 99
+    oo::objdefine $o export variable
+    $o variable varName
+    set varName
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {::options}
+
+test optionHandler-2.3 {remember variable name} -setup {
+} -body {
+    set o [OptionHandler new -useassertions {*}{
+        -foo
+        {-bar default 1}
+    }]
+    $o extract ::options -bar 99
+    $o defaultTo -foo -bar
+    getResult {}
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 99} {-foo 99}} {}}
+
+test optionHandler-2.4 {expand a value prefix} -setup {
+} -body {
+    set o [OptionHandler new -useassertions {*}{
+        -foo
+    }]
+    $o extract ::options -foo ab
+    $o expand -foo {abc abb def}
+    getResult {}
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {ambiguous value "ab": must be abc, abb, or def} -returnCodes error
+
+test optionHandler-2.5 {expand a value prefix} -setup {
+} -body {
+    set o [OptionHandler new -useassertions {*}{
+        -foo
+    }]
+    $o extract ::options -foo d
+    $o expand -foo {abc abb def}
+    getResult {}
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-foo def}} {}}
+
 cleanupTests ; return
