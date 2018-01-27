@@ -15,7 +15,7 @@ oo::class create OptionHandler {
         my assert {[string match -* $opt]}
         dict set data $opt $args
         if {[dict exists $args flag] && [dict get $args flag]} {
-            dict set data -no$opt flag 1
+            dict set data [regsub {^(-{1,2})} $opt {\1no-}] flag 1
             if {![dict exists $args default]} {
                 dict set data $opt default 0
             }
@@ -68,8 +68,8 @@ oo::class create OptionHandler {
                     set opt $word
                 }
                 if {[my IsFlag $opt]} {
-                    if {[string match -no-* $opt]} {
-                        set opt [string range $opt 3 end]
+                    if {[regexp {^-{1,2}no-} $opt]} {
+                        set opt [regsub {no-} $opt {}]
                         set val 0
                     } else {
                         set val 1
