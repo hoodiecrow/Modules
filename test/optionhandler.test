@@ -319,4 +319,29 @@ test optionHandler-2.0 {long option aware negation} -setup {
     log::lvSuppressLE i 1
 } -result {{{--abd 0} {-abc 0}} {}}
 
+test optionHandler-2.1 {remember variable name} -setup {
+} -body {
+    set o [OptionHandler new -useassertions]
+    oo::objdefine $o export variable
+    $o variable varName
+    set varName
+} -cleanup {
+    unset -nocomplain options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {can't read "varName": no such variable} -returnCodes error
+
+test optionHandler-2.2 {remember variable name} -setup {
+} -body {
+    set o [OptionHandler new -useassertions]
+    $o extract ::options -foo 99
+    oo::objdefine $o export variable
+    $o variable varName
+    set varName
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {::options}
+
 cleanupTests ; return

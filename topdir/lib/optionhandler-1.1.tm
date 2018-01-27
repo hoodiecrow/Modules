@@ -2,7 +2,7 @@ package require assertionhandler
 
 oo::class create OptionHandler {
     mixin AssertionHandler
-    variable data table
+    variable data table varName
 
     constructor args {
         set data {}
@@ -27,6 +27,7 @@ oo::class create OptionHandler {
         my assert {![info exists $name]}
         #my assert {[llength $args] > 0}
         array set $name {}
+        set varName $name
         my AddDefaults $name
         my ProcessCmdLine $name {*}$args
     }
