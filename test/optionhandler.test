@@ -306,5 +306,17 @@ test optionHandler-1.21 {options in constructor} -setup {
     log::lvSuppressLE i 1
 } -result {{{-abc 1} {-abd 2} {-bar 99} {-def 3}} {bar baz}}
 
-# This test batch is usually run in tkcon, so make it reload the package.
-package forget optionhandler ; cleanupTests ; return
+test optionHandler-2.0 {long option aware negation} -setup {
+} -body {
+    set o [OptionHandler new -useassertions {*}{
+        {-abc flag 1 default 1}
+        {--abd flag 1 default 1}
+    }]
+    getResult [$o extract ::options -no-abc --no-abd]
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{--abd 0} {-abc 0}} {}}
+
+cleanupTests ; return
