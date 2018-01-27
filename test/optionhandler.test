@@ -344,4 +344,19 @@ test optionHandler-2.2 {remember variable name} -setup {
     log::lvSuppressLE i 1
 } -result {::options}
 
+test optionHandler-2.2 {remember variable name} -setup {
+} -body {
+    set o [OptionHandler new -useassertions {*}{
+        -foo
+        {-bar default 1}
+    }]
+    $o extract ::options -bar 99
+    $o defaultTo -foo -bar
+    getResult {}
+} -cleanup {
+    unset options
+    $o destroy
+    log::lvSuppressLE i 1
+} -result {{{-bar 99} {-foo 99}} {}}
+
 cleanupTests ; return

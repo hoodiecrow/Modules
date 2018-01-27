@@ -44,6 +44,15 @@ oo::class create OptionHandler {
         return $prefix\nOptions:\n[join [lsort -dictionary $docs] \n]\n
     }
 
+    method defaultTo {opt1 opt2} {
+        # TODO decide if should fail if opt2 not present
+        if {![info exists $varName\($opt1)]} {
+            if {[info exists $varName\($opt2)]} {
+                set $varName\($opt1) [set $varName\($opt2)]
+            }
+        }
+    }
+
     method GetTable {} {
         my assert {[info exists data]}
         lsort -dictionary -unique [dict keys $data]
