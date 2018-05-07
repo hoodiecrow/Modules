@@ -1,0 +1,53 @@
+package require tcltest
+namespace import ::tcltest::*
+
+::tcltest::configure {*}$argv
+
+::tcltest::testConstraint skip 0
+::tcltest::testConstraint noskip 1
+
+::tcltest::loadTestedCommands
+
+package require pda
+
+dict set δ q2 {} S {q1 {}}
+dict set δ q2 0  S {q2 0}
+dict set δ q2 0  0 {q2 {0 0}}
+dict set δ q2 1  0 {q3 {}}
+dict set δ q3 1  0 {q3 {}}
+dict set δ q3 {} S {q4 {}}
+
+test pda-1.0 {} -setup {
+    set res {}
+    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+} -body {
+    M run {}
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result 1
+
+
+test pda-1.1 {} -setup {
+    set res {}
+    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+} -body {
+    M run {0 0 0 0 1 1 1 1}
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result 1
+
+
+test pda-1.2 {} -setup {
+    set res {}
+    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+} -body {
+    M run {0 0 0 0 1 1 1 1 1}
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {Illegal transition (q3,1,S)} -returnCodes error
+
+
+::tcltest::cleanupTests
