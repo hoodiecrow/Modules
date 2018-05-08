@@ -1,6 +1,5 @@
 package require log
 
-catch {PDA destroy}
 # Q : the set of allowed states
 # Σ : the "alphabet" (set of input symbols)
 # Γ : the "stack alphabet" (set of stack symbols)
@@ -9,19 +8,57 @@ catch {PDA destroy}
 # Z : the initial stack contents
 # F : the set of accept states
 oo::class create PDA {
-    variable Q Σ Γ δ s Z F state stack token
+    variable Q Σ Γ δ s Z F script state stack token int dump SS
     constructor args {
-        lassign $args Q Σ Γ δ s Z F
+        lassign $args Q Σ Γ δ s Z F script
         my reset
+        oo::objdefine [self] forward dump set [self namespace]::dump
+    }
+
+    if no {
+    method SaveState {{s {}}} {
+        if {$s eq {}} {
+            lappend SS $state
+        } else {
+            lappend SS $s
+        }
+        return
+    }
+
+    method RestoreState {} {
+        set state [lindex $SS end]
+        set SS [lrange $SS 0 end-1]
+        return state<-$state
+    }
     }
 
     method reset {} {
         set state $s
         set stack $Z
         set token {}
+        set SS {}
+        catch {interp delete $int}
+        set int [interp create -safe]
+        $int eval {set output {}}
+        $int eval {
+            proc emit args {
+                lappend ::output {*}$args
+            }
+        }
+        if no {
+        $int alias saveState {*}[namespace code my] SaveState
+        $int alias restoreState {*}[namespace code my] RestoreState
+        }
+        $int eval $script
+        set dump {}
     }
 
     method stackop args {
+        foreach arg $args {
+            if {$arg ni [concat {} ${Γ}]} {
+                return -code error [format {Illegal stack token "%s"} $arg]
+            }
+        }
         if {[lindex $stack 0] eq $Z} {
             set stack [linsert $args end $Z]
         } else {
@@ -29,12 +66,16 @@ oo::class create PDA {
         }
     }
 
+    method output {} {
+        $int eval {set output}
+    }
+
     method δ {q a X} {
         if {[dict exists ${δ} $q $a $X]} {
             lassign [dict get ${δ} $q $a $X] state γ action
             my stackop {*}${γ}
-            my eval $action
-            log::log d [list $q $a $X -> $state ${γ} $action $stack]
+            set actionResult [$int eval $action]
+            lappend dump [list $q $a $X -> $state ${γ} $actionResult $stack]
         } else {
             return -code error [format {Illegal transition (%s,%s,%s)} $q $a $X]
         }
@@ -43,12 +84,21 @@ oo::class create PDA {
     method run tokens {
         for {set i 0} {$i <= [llength $tokens]} {incr i} {
             set token [lindex $tokens $i]
+            $int eval [list set token $token]
             lassign $token a
             if {$a ni [linsert ${Σ} end {}]} {
-                return -code error [format {Illegal input token "%s"} $token]
+                lappend dump [format {Illegal input token "%s" at index #%d} $token $i]
+                break
             }
-            my δ $state $a [lindex $stack 0]
+            try {
+                my δ $state $a [lindex $stack 0]
+            } on error msg {
+                lappend dump Error:\ $msg
+                break
+            }
         }
-        expr {$state in $F}
+        set result [expr {$state in $F}]
+        lappend dump $result
+        return $result
     }
 }
