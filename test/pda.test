@@ -509,21 +509,21 @@ test pda-2.2 {} -setup {
 
     dict set δ1 q0 sp S {q1 {}    {}}
     dict set δ1 q0 nl S {q1 {}    {}}
-    dict set δ1 q0 w  S {q2 {}    {emit append [lindex $token 1]}}
+    dict set δ1 q0 w  S {q2 {}    {emit add [lindex $token 1]}}
     dict set δ1 q0 lb S {q1 {B}   {emit push B}}
     dict set δ1 q0 dq S {q1 {Q}   {emit push Q}}
     dict set δ1 q0 lc S {q1 {C}   {emit push C}}
 
     dict set δ1 q1 sp S {q1 {}    {}}
     dict set δ1 q1 nl S {q1 {}    {emit command}}
-    dict set δ1 q1 w  S {q2 {}    {emit append [lindex $token 1]}}
+    dict set δ1 q1 w  S {q2 {}    {emit add [lindex $token 1]}}
     dict set δ1 q1 lb S {q1 {B}   {emit push B}}
     dict set δ1 q1 dq S {q1 {Q}   {emit push Q}}
     dict set δ1 q1 lc S {q1 {C}   {emit push C}}
     
     dict set δ1 q1 sp B {q1 {B}   {}}
     dict set δ1 q1 nl B {q1 {B}   {emit command}}
-    dict set δ1 q1 w  B {q2 {B}   {emit append [lindex $token 1]}}
+    dict set δ1 q1 w  B {q2 {B}   {emit add [lindex $token 1]}}
     dict set δ1 q1 lb B {q1 {B B} {emit push B}}
     dict set δ1 q1 dq B {q1 {Q B} {emit push Q}}
     dict set δ1 q1 lc B {q1 {C B} {emit push C}}
@@ -531,89 +531,89 @@ test pda-2.2 {} -setup {
     
     dict set δ1 q1 sp Q {q1 {Q}   {}}
     dict set δ1 q1 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q1 w  Q {q2 {Q}   {emit append [lindex $token 1]}}
+    dict set δ1 q1 w  Q {q2 {Q}   {emit add [lindex $token 1]}}
     dict set δ1 q1 lb Q {q1 {B Q} {emit push B}}
     dict set δ1 q1 dq Q {q3 {}    {emit pop}}
     dict set δ1 q1 lc Q {q1 {C Q} {emit push C}}
     
     dict set δ1 q1 sp C {q1 {C}   {}}
     dict set δ1 q1 nl C {q1 {C}   {emit command}}
-    dict set δ1 q1 w  C {q2 {C}   {emit append [lindex $token 1]}}
+    dict set δ1 q1 w  C {q2 {C}   {emit add [lindex $token 1]}}
     dict set δ1 q1 lb C {q1 {B C} {emit push B}}
     dict set δ1 q1 dq C {q1 {Q C} {emit push Q}}
     dict set δ1 q1 lc C {q1 {C C} {emit push C}}
     dict set δ1 q1 rc C {q3 {}    {emit pop}}
     
-    dict set δ1 q2 sp S {q4 {}    {}}
+    dict set δ1 q2 sp S {q4 {}    {emit space {}}}
     dict set δ1 q2 nl S {q1 {}    {emit command}}
-    dict set δ1 q2 w  S {q2 {}    {emit append [lindex $token 1]}}
+    dict set δ1 q2 w  S {q2 {}    {emit add [lindex $token 1]}}
     dict set δ1 q2 lb S {q1 {B}   {emit push B}}
     dict set δ1 q2 dq S {q1 {Q}   {emit push Q}}
     dict set δ1 q2 lc S {q1 {C}   {emit push C}}
     
-    dict set δ1 q2 sp B {q4 {B}   {}}
+    dict set δ1 q2 sp B {q4 {B}   {emit space {}}}
     dict set δ1 q2 nl B {q1 {B}   {emit command}}
-    dict set δ1 q2 w  B {q2 {B}   {emit append [lindex $token 1]}}
+    dict set δ1 q2 w  B {q2 {B}   {emit add [lindex $token 1]}}
     dict set δ1 q2 lb B {q1 {B B} {emit push B}}
     dict set δ1 q2 dq B {q1 {Q B} {emit push Q}}
     dict set δ1 q2 lc B {q1 {C B} {emit push C}}
     dict set δ1 q2 rb B {q2 {}    {emit pop}}
     
-    dict set δ1 q2 sp Q {q4 {Q}   {}}
+    dict set δ1 q2 sp Q {q4 {Q}   {emit space {}}}
     dict set δ1 q2 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q2 w  Q {q2 {Q}   {emit append [lindex $token 1]}}
+    dict set δ1 q2 w  Q {q2 {Q}   {emit add [lindex $token 1]}}
     dict set δ1 q2 lb Q {q1 {B Q} {emit push B}}
     dict set δ1 q2 dq Q {q3 {}    {emit pop}}
     dict set δ1 q2 lc Q {q1 {C Q} {emit push C}}
     
-    dict set δ1 q2 sp C {q4 {C}   {}}
+    dict set δ1 q2 sp C {q4 {C}   {emit space {}}}
     dict set δ1 q2 nl C {q1 {C}   {emit command}}
-    dict set δ1 q2 w  C {q2 {C}   {emit append [lindex $token 1]}}
+    dict set δ1 q2 w  C {q2 {C}   {emit add [lindex $token 1]}}
     dict set δ1 q2 lb C {q1 {B C} {emit push B}}
     dict set δ1 q2 dq C {q1 {Q C} {emit push Q}}
     dict set δ1 q2 lc C {q1 {C C} {emit push C}}
     dict set δ1 q2 rc C {q3 {}    {emit pop}}
     
-    dict set δ1 q3 sp S {q4 {}    {}}
+    dict set δ1 q3 sp S {q4 {}    {emit space {}}}
     dict set δ1 q3 nl S {q1 {}    {emit command}}
-    dict set δ1 q3 sp B {q4 {B}   {}}
+    dict set δ1 q3 sp B {q4 {B}   {emit space {}}}
     dict set δ1 q3 nl B {q1 {B}   {emit command}}
     dict set δ1 q3 rb B {q2 {}    {emit pop}}
-    dict set δ1 q3 sp Q {q4 {Q}   {}}
+    dict set δ1 q3 sp Q {q4 {Q}   {emit space {}}}
     dict set δ1 q3 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q3 sp C {q4 {C}   {}}
+    dict set δ1 q3 sp C {q4 {C}   {emit space {}}}
     dict set δ1 q3 nl C {q1 {C}   {emit command}}
     dict set δ1 q3 rc C {q3 {}    {emit pop}}
 
-    dict set δ1 q4 sp S {q4 {}    {}}
+    dict set δ1 q4 sp S {q4 {}    {emit space {}}}
     dict set δ1 q4 nl S {q1 {}    {emit command}}
-    dict set δ1 q4 w  S {q2 {}    {emit nextWord [lindex $token 1]}}
-    dict set δ1 q4 em S {q3 {}    {emit nextWord [lindex $token 1]}}
+    dict set δ1 q4 w  S {q2 {}    {emit space [lindex $token 1]}}
+    dict set δ1 q4 em S {q3 {}    {emit space [lindex $token 1]}}
     dict set δ1 q4 lb S {q1 {B}   {emit push B}}
     dict set δ1 q4 dq S {q1 {Q}   {emit push Q}}
     dict set δ1 q4 lc S {q1 {C}   {emit push C}}
 
-    dict set δ1 q4 sp B {q4 {B}   {}}
+    dict set δ1 q4 sp B {q4 {B}   {emit space {}}}
     dict set δ1 q4 nl B {q1 {B}   {emit command}}
-    dict set δ1 q4 w  B {q2 {B}   {emit nextWord [lindex $token 1]}}
-    dict set δ1 q4 em B {q3 {B}   {emit nextWord [lindex $token 1]}}
+    dict set δ1 q4 w  B {q2 {B}   {emit space [lindex $token 1]}}
+    dict set δ1 q4 em B {q3 {B}   {emit space [lindex $token 1]}}
     dict set δ1 q4 lb B {q1 {B B} {emit push B}}
     dict set δ1 q4 dq B {q1 {Q B} {emit push Q}}
     dict set δ1 q4 lc B {q1 {C B} {emit push C}}
     dict set δ1 q4 rb B {q2 {}    {emit pop}}
 
-    dict set δ1 q4 sp Q {q4 {Q}   {}}
+    dict set δ1 q4 sp Q {q4 {Q}   {emit space {}}}
     dict set δ1 q4 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q4 w  Q {q2 {Q}   {emit nextWord [lindex $token 1]}}
-    dict set δ1 q4 em Q {q3 {Q}   {emit nextWord [lindex $token 1]}}
+    dict set δ1 q4 w  Q {q2 {Q}   {emit space [lindex $token 1]}}
+    dict set δ1 q4 em Q {q3 {Q}   {emit space [lindex $token 1]}}
     dict set δ1 q4 lb Q {q1 {B Q} {emit push B}}
     dict set δ1 q4 dq Q {q3 {}    {emit pop}}
     dict set δ1 q4 lc Q {q1 {C Q} {emit push C}}
 
-    dict set δ1 q4 sp C {q4 {C}   {}}
+    dict set δ1 q4 sp C {q4 {C}   {emit space {}}}
     dict set δ1 q4 nl C {q1 {C}   {emit command}}
-    dict set δ1 q4 w  C {q2 {C}   {emit nextWord [lindex $token 1]}}
-    dict set δ1 q4 em C {q3 {C}   {emit nextWord [lindex $token 1]}}
+    dict set δ1 q4 w  C {q2 {C}   {emit space [lindex $token 1]}}
+    dict set δ1 q4 em C {q3 {C}   {emit space [lindex $token 1]}}
     dict set δ1 q4 lb C {q1 {B C} {emit push B}}
     dict set δ1 q4 dq C {q1 {Q C} {emit push Q}}
     dict set δ1 q4 lc C {q1 {C C} {emit push C}}
