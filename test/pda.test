@@ -20,7 +20,7 @@ dict set δ q3 {} S {q4 {}}
 
 test pda-1.0 {} -setup {
     set res {}
-    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+    PDA create M [dict create Q {q1 q2 q3 q4} Σ {0 1} Γ {S 0} δ ${δ} s q2 Z S F {q1 q4}]
 } -body {
     M run {}
 } -cleanup {
@@ -31,7 +31,7 @@ test pda-1.0 {} -setup {
 
 test pda-1.1 {} -setup {
     set res {}
-    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+    PDA create M [dict create Q {q1 q2 q3 q4} Σ {0 1} Γ {S 0} δ ${δ} s q2 Z S F {q1 q4}]
 } -body {
     M run {0 0 0 0 1 1 1 1}
 } -cleanup {
@@ -42,7 +42,7 @@ test pda-1.1 {} -setup {
 
 test pda-1.2 {} -setup {
     set res {}
-    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+    PDA create M [dict create Q {q1 q2 q3 q4} Σ {0 1} Γ {S 0} δ ${δ} s q2 Z S F {q1 q4}]
 } -body {
     M run {0 0 0 0 1 1 1 1 1}
 } -cleanup {
@@ -53,25 +53,43 @@ test pda-1.2 {} -setup {
 
 test pda-1.3 {} -setup {
     set res {}
-    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ} q2 S {q1 q4}
+    PDA create M [dict create Q {q1 q2 q3 q4} Σ {0 1} Γ {S 0} δ ${δ} s q2 Z S F {q1 q4}]
 } -body {
     M run {0 1 1}
     M dump
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
-} -result {{q2 0 S -> q2 0 {} {0 S}} {q2 1 0 -> q3 {} {} S} {Error: Illegal transition (q3,1,S)} 0}
+} -result {{q2 0 S -> q2 0 {} {0 S}} {q2 1 0 -> q3 {} {} S} {{Error: Illegal transition (q3,1,S)}} 0}
+
+
+if no {
+test pda-0.1 {} -setup {
+    set res {}
+    PDA create M [dict create Q {q1 q2 q3 q4} Σ {0 1} Γ {S 0} δ {} s q2 Z S F {q1 q4}]
+} -body {
+    M addTransition q2 {} S {q1 {}}
+    M addTransition q2 0  S {q2 0}
+    M addTransition q2 0  0 {q2 {0 0}}
+    M addTransition q2 1  0 {q3 {}}
+    M addTransition q3 1  0 {q3 {}}
+    M addTransition q3 {} S {q4 {}}
+    M show δ
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {q2 {{} {S {q1 {}}} 0 {S {q2 0} 0 {q2 {0 0}}} 1 {0 {q3 {}}}} q3 {1 {0 {q3 {}}} {} {S {q4 {}}}}}
+}
 
 
 test pda-1.4 {} -setup {
     set res {}
-    dict set δ1 q2 {} S {q1 {}    {emit success "no input"}}
-    dict set δ1 q2 0  S {q2 0     {emit LVL [incr n]}}
-    dict set δ1 q2 0  0 {q2 {0 0} {emit LVL [incr n]}}
-    dict set δ1 q2 1  0 {q3 {}    {emit LVL [incr n -1]}}
-    dict set δ1 q3 1  0 {q3 {}    {emit LVL [incr n -1]}}
-    dict set δ1 q3 {} S {q4 {}    {emit success match}}
-    PDA create M {q1 q2 q3 q4} {0 1} {S 0} ${δ1} q2 S {q1 q4}
+    PDA create M [dict create Q {q1 q2 q3 q4} Σ {0 1} Γ {S 0} δ {} s q2 Z S F {q1 q4}]
+    M addTransition q2      {} S {q1 {}    {emit success "no input"}}
+    M addTransition q2      0  S {q2 0     {emit LVL [incr n]}}
+    M addTransition q2      0  0 {q2 {0 0} {emit LVL [incr n]}}
+    M addTransition {q[23]} 1  0 {q3 {}    {emit LVL [incr n -1]}}
+    M addTransition q3      {} S {q4 {}    {emit success match}}
 } -body {
     M run {}
     lappend res [M output]
@@ -83,34 +101,21 @@ test pda-1.4 {} -setup {
     lappend res [M output]
 } -cleanup {
     M destroy
-    unset δ1
     log::lvSuppressLE i 1
 } -result {{success {no input}} {LVL 1 LVL 0} {LVL 1 LVL 2 LVL 1 LVL 0 success match}}
 
 
 test pda-2.0 {} -setup {
     set res {}
-    dict set δ1 q1 {} S {q0 {}    {emit success "no input"}}
-    dict set δ1 q1 sp S {q1 {}    {}}
-    dict set δ1 q1 nl S {q1 {}    {}}
-    dict set δ1 q1 w  S {q2 {}    {emit cmd [lindex $token 1]}}
-    dict set δ1 q2 sp S {q3 {}    {}}
-    dict set δ1 q2 nl S {q1 {}    {}}
-    dict set δ1 q2 w  S {q2 {}    {emit cmd [lindex $token 1]}}
-    dict set δ1 q3 sp S {q3 {}    {}}
-    dict set δ1 q3 nl S {q1 {}    {}}
-    dict set δ1 q3 w  S {q4 {}    {emit arg [lindex $token 1]}}
-    dict set δ1 q4 sp S {q5 {}    {}}
-    dict set δ1 q4 nl S {q1 {}    {}}
-    dict set δ1 q4 w  S {q4 {}    {emit arg [lindex $token 1]}}
-    dict set δ1 q5 sp S {q5 {}    {}}
-    dict set δ1 q5 nl S {q1 {}    {}}
-    dict set δ1 q5 w  S {q4 {}    {emit arg [lindex $token 1]}}
-    dict set δ1 q2 {} S {q6 {}    {emit success match}}
-    dict set δ1 q3 {} S {q6 {}    {emit success match}}
-    dict set δ1 q4 {} S {q6 {}    {emit success match}}
-    dict set δ1 q5 {} S {q6 {}    {emit success match}}
-    PDA create M {q0 q1 q2 q3 q4 q5 q6} {sp w nl} {S} ${δ1} q1 S {q0 q6}
+    PDA create M [dict create Q {q0 q1 q2 q3 q4 q5 q6} Σ {sp w n} Γ {S} δ {} s q1 Z S F {q0 q6}]
+    M addTransition {q[1-5]} nl S {q1 {}    {}}
+    M addTransition q1       {} S {q0 {}    {emit success "no input"}}
+    M addTransition q1       sp S {q1 {}    {}}
+    M addTransition {q[12]}  w  S {q2 {}    {emit cmd [lindex $token 1]}}
+    M addTransition {q[23]}  sp S {q3 {}    {}}
+    M addTransition {q[345]} w  S {q4 {}    {emit arg [lindex $token 1]}}
+    M addTransition {q[45]}  sp S {q5 {}    {}}
+    M addTransition {q[2-5]} {} S {q6 {}    {emit success match}}
 } -body {
     M run {}
     lappend res [M output]
@@ -122,7 +127,6 @@ test pda-2.0 {} -setup {
     lappend res [M output]
 } -cleanup {
     M destroy
-    unset δ1
     log::lvSuppressLE i 1
 } -result {{success {no input}} {cmd foo success match} {cmd foo arg bar success match}}
 
@@ -207,7 +211,7 @@ test pda-2.1 {} -setup {
     dict set δ1 q4 {} S {q7 {}    {lmap command $commands {$command dump}}}
     dict set δ1 q5 {} S {q7 {}    {lmap command $commands {$command dump}}}
     dict set δ1 q6 {} S {q7 {}    {lmap command $commands {$command dump}}}
-    PDA create M {q0 q1 q2 q4 q5 q6 q7} {sp w nl lb rb} {S C A} ${δ1} q1 S {q0 q7} {
+    PDA create M [dict create Q {q0 q1 q2 q4 q5 q6 q7} Σ {sp w nl lb rb} Γ {S C A} δ ${δ1} s q1 Z S F {q0 q7}] {
         oo::class create Command {
             variable id words current
             constructor args {
@@ -272,7 +276,7 @@ test pda-2.1 {} -setup {
     M destroy
     unset δ1
     log::lvSuppressLE i 1
-} -result {{{q1 lb S -> q2 C {} {C S}} {q2 w C -> q4 C NC(foo) {C S}} {q4 rb C -> q4 {} 1 S} {q4 {} S -> q7 {} {{0: {} #1#} {1: foo}} S} 1} {{q1 lb S -> q2 C {} {C S}} {q2 w C -> q4 C NC(foo) {C S}} {q4 rb C -> q4 {} 1 S} {Error: Illegal transition (q4,rb,S)} 0} {{q1 lb S -> q2 C {} {C S}} {q2 w C -> q4 C NC(foo) {C S}} {q4 sp C -> q5 C {} {C S}} {q5 w C -> q6 C 1 {C S}} {q6 sp C -> q5 C {} {C S}} {q5 w C -> q6 C 2 {C S}} {q6 nl C -> q2 C {} {C S}} {q2 rb C -> q4 {} 1 S} {q4 nl S -> q2 {} {} S} {q2 {} S -> q7 {} {{0: {} #1#} {1: foo ab cd}} S} 1} {{q1 w S -> q4 {} NC(foo) S} {q4 sp S -> q5 {} {} S} {q5 lb S -> q2 A {} {A S}} {q2 w A -> q4 A NC(ab) {A S}} {q4 sp A -> q5 A {} {A S}} {q5 w A -> q6 A 1 {A S}} {q6 nl A -> q2 A {} {A S}} {q2 rb A -> q4 {} 1 S} {q4 sp S -> q5 {} {} S} {q5 w S -> q6 {} 2 S} {q6 nl S -> q2 {} {} S} {q2 {} S -> q7 {} {{0: {}} {1: foo #2# ef} {2: ab cd}} S} 1}}
+} -result {{{q1 lb S -> q2 C {} {C S}} {q2 w C -> q4 C NC(foo) {C S}} {q4 rb C -> q4 {} 1 S} {q4 {} S -> q7 {} {{0: {} #1#} {1: foo}} S} 1} {{q1 lb S -> q2 C {} {C S}} {q2 w C -> q4 C NC(foo) {C S}} {q4 rb C -> q4 {} 1 S} {{Error: Illegal transition (q4,rb,S)}} 0} {{q1 lb S -> q2 C {} {C S}} {q2 w C -> q4 C NC(foo) {C S}} {q4 sp C -> q5 C {} {C S}} {q5 w C -> q6 C 1 {C S}} {q6 sp C -> q5 C {} {C S}} {q5 w C -> q6 C 2 {C S}} {q6 nl C -> q2 C {} {C S}} {q2 rb C -> q4 {} 1 S} {q4 nl S -> q2 {} {} S} {q2 {} S -> q7 {} {{0: {} #1#} {1: foo ab cd}} S} 1} {{q1 w S -> q4 {} NC(foo) S} {q4 sp S -> q5 {} {} S} {q5 lb S -> q2 A {} {A S}} {q2 w A -> q4 A NC(ab) {A S}} {q4 sp A -> q5 A {} {A S}} {q5 w A -> q6 A 1 {A S}} {q6 nl A -> q2 A {} {A S}} {q2 rb A -> q4 {} 1 S} {q4 sp S -> q5 {} {} S} {q5 w S -> q6 {} 2 S} {q6 nl S -> q2 {} {} S} {q2 {} S -> q7 {} {{0: {}} {1: foo #2# ef} {2: ab cd}} S} 1}}
 
 
 test pda-2.2 {} -constraints {TODO} -setup {
@@ -403,7 +407,7 @@ test pda-2.2 {} -constraints {TODO} -setup {
     dict set δ1 q2 {} S {qf {}    {lmap command $commands {$command dump}}}
     dict set δ1 q3 {} S {qf {}    {lmap command $commands {$command dump}}}
     dict set δ1 q4 {} S {qf {}    {lmap command $commands {$command dump}}}
-    PDA create M {qe qf q0 q1 q2 q3 q4} {sp w nl lb rb dq lc rc em} {S B Q C} ${δ1} q0 S {qe qf} {
+    PDA create M [dict create Q {qe qf q0 q1 q2 q3 q4} Σ {sp w nl lb rb dq lc rc em} Γ {S B Q C} δ ${δ1} s q0 Z S F {qe qf}] {
         oo::class create Command {
             variable id words current
             constructor args {
@@ -497,6 +501,16 @@ set code {set fp [open foo r]}
 
 test pda-2.2 {} -setup {
     set res {}
+    PDA create M [dict create Q {qe qf q0 q1 q2 q3 q4} Σ {sp w nl lb rb dq lc rc em} Γ {S B Q C} δ {} s q0 Z S F {qe qf}] {
+        set cmdnum 0
+        set commands($cmdnum) {}
+        proc appendToCommand {} {
+            global commands cmdnum token
+            lset commands($cmdnum) end [lindex $commands($cmdnum) end][lindex $token 1]
+        }
+        emit enter S
+        emit command
+    }
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -505,132 +519,59 @@ test pda-2.2 {} -setup {
     # q2    in word, more text may follow
     # q3    in word, no more text
     # q4    interword space or after command
-    dict set δ1 q0 {} S {qe {}    {emit success "no input"}}
+    # 20180515 expands from 25 calls to 103 rules
+    M addTransition q0        {} S {qe {}    {emit success "no input"}}
+    M addTransition {q[1-4]}  {} S {qf {}    {emit success done}}
 
-    dict set δ1 q0 sp S {q1 {}    {}}
-    dict set δ1 q0 nl S {q1 {}    {}}
-    dict set δ1 q0 w  S {q2 {}    {emit add [lindex $token 1]}}
-    dict set δ1 q0 lb S {q1 {B}   {emit push B}}
-    dict set δ1 q0 dq S {q1 {Q}   {emit push Q}}
-    dict set δ1 q0 lc S {q1 {C}   {emit push C}}
+    M addTransition q0        w  S {q2 -     {emit add [lindex $token 1]}}
+    M addTransition {q[12]}   w  * {q2 -     {emit add [lindex $token 1]}}
+    M addTransition q4        w  * {q2 -     {emit space add [lindex $token 1]}}
 
-    dict set δ1 q1 sp S {q1 {}    {}}
-    dict set δ1 q1 nl S {q1 {}    {emit command}}
-    dict set δ1 q1 w  S {q2 {}    {emit add [lindex $token 1]}}
-    dict set δ1 q1 lb S {q1 {B}   {emit push B}}
-    dict set δ1 q1 dq S {q1 {Q}   {emit push Q}}
-    dict set δ1 q1 lc S {q1 {C}   {emit push C}}
-    
-    dict set δ1 q1 sp B {q1 {B}   {}}
-    dict set δ1 q1 nl B {q1 {B}   {emit command}}
-    dict set δ1 q1 w  B {q2 {B}   {emit add [lindex $token 1]}}
-    dict set δ1 q1 lb B {q1 {B B} {emit push B}}
-    dict set δ1 q1 dq B {q1 {Q B} {emit push Q}}
-    dict set δ1 q1 lc B {q1 {C B} {emit push C}}
-    dict set δ1 q1 rb B {q2 {}    {emit pop}}
-    
-    dict set δ1 q1 sp Q {q1 {Q}   {}}
-    dict set δ1 q1 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q1 w  Q {q2 {Q}   {emit add [lindex $token 1]}}
-    dict set δ1 q1 lb Q {q1 {B Q} {emit push B}}
-    dict set δ1 q1 dq Q {q3 {}    {emit pop}}
-    dict set δ1 q1 lc Q {q1 {C Q} {emit push C}}
-    
-    dict set δ1 q1 sp C {q1 {C}   {}}
-    dict set δ1 q1 nl C {q1 {C}   {emit command}}
-    dict set δ1 q1 w  C {q2 {C}   {emit add [lindex $token 1]}}
-    dict set δ1 q1 lb C {q1 {B C} {emit push B}}
-    dict set δ1 q1 dq C {q1 {Q C} {emit push Q}}
-    dict set δ1 q1 lc C {q1 {C C} {emit push C}}
-    dict set δ1 q1 rc C {q3 {}    {emit pop}}
-    
-    dict set δ1 q2 sp S {q4 {}    {emit space {}}}
-    dict set δ1 q2 nl S {q1 {}    {emit command}}
-    dict set δ1 q2 w  S {q2 {}    {emit add [lindex $token 1]}}
-    dict set δ1 q2 lb S {q1 {B}   {emit push B}}
-    dict set δ1 q2 dq S {q1 {Q}   {emit push Q}}
-    dict set δ1 q2 lc S {q1 {C}   {emit push C}}
-    
-    dict set δ1 q2 sp B {q4 {B}   {emit space {}}}
-    dict set δ1 q2 nl B {q1 {B}   {emit command}}
-    dict set δ1 q2 w  B {q2 {B}   {emit add [lindex $token 1]}}
-    dict set δ1 q2 lb B {q1 {B B} {emit push B}}
-    dict set δ1 q2 dq B {q1 {Q B} {emit push Q}}
-    dict set δ1 q2 lc B {q1 {C B} {emit push C}}
-    dict set δ1 q2 rb B {q2 {}    {emit pop}}
-    
-    dict set δ1 q2 sp Q {q4 {Q}   {emit space {}}}
-    dict set δ1 q2 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q2 w  Q {q2 {Q}   {emit add [lindex $token 1]}}
-    dict set δ1 q2 lb Q {q1 {B Q} {emit push B}}
-    dict set δ1 q2 dq Q {q3 {}    {emit pop}}
-    dict set δ1 q2 lc Q {q1 {C Q} {emit push C}}
-    
-    dict set δ1 q2 sp C {q4 {C}   {emit space {}}}
-    dict set δ1 q2 nl C {q1 {C}   {emit command}}
-    dict set δ1 q2 w  C {q2 {C}   {emit add [lindex $token 1]}}
-    dict set δ1 q2 lb C {q1 {B C} {emit push B}}
-    dict set δ1 q2 dq C {q1 {Q C} {emit push Q}}
-    dict set δ1 q2 lc C {q1 {C C} {emit push C}}
-    dict set δ1 q2 rc C {q3 {}    {emit pop}}
-    
-    dict set δ1 q3 sp S {q4 {}    {emit space {}}}
-    dict set δ1 q3 nl S {q1 {}    {emit command}}
-    dict set δ1 q3 sp B {q4 {B}   {emit space {}}}
-    dict set δ1 q3 nl B {q1 {B}   {emit command}}
-    dict set δ1 q3 rb B {q2 {}    {emit pop}}
-    dict set δ1 q3 sp Q {q4 {Q}   {emit space {}}}
-    dict set δ1 q3 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q3 sp C {q4 {C}   {emit space {}}}
-    dict set δ1 q3 nl C {q1 {C}   {emit command}}
-    dict set δ1 q3 rc C {q3 {}    {emit pop}}
+    M addTransition q4        em * {q3 -     {emit space add [lindex $token 1]}}
 
-    dict set δ1 q4 sp S {q4 {}    {emit space {}}}
-    dict set δ1 q4 nl S {q1 {}    {emit command}}
-    dict set δ1 q4 w  S {q2 {}    {emit space [lindex $token 1]}}
-    dict set δ1 q4 em S {q3 {}    {emit space [lindex $token 1]}}
-    dict set δ1 q4 lb S {q1 {B}   {emit push B}}
-    dict set δ1 q4 dq S {q1 {Q}   {emit push Q}}
-    dict set δ1 q4 lc S {q1 {C}   {emit push C}}
+    M addTransition q0        nl S {q1 {}}
+    M addTransition {q[1-4]}  nl * {q1 -     {emit command}}
 
-    dict set δ1 q4 sp B {q4 {B}   {emit space {}}}
-    dict set δ1 q4 nl B {q1 {B}   {emit command}}
-    dict set δ1 q4 w  B {q2 {B}   {emit space [lindex $token 1]}}
-    dict set δ1 q4 em B {q3 {B}   {emit space [lindex $token 1]}}
-    dict set δ1 q4 lb B {q1 {B B} {emit push B}}
-    dict set δ1 q4 dq B {q1 {Q B} {emit push Q}}
-    dict set δ1 q4 lc B {q1 {C B} {emit push C}}
-    dict set δ1 q4 rb B {q2 {}    {emit pop}}
+    M addTransition q1        sp * {q1 -}
+    M addTransition {q[01]}   sp S {q1 {}}
+    M addTransition {q[2-4]}  sp * {q4 -}
 
-    dict set δ1 q4 sp Q {q4 {Q}   {emit space {}}}
-    dict set δ1 q4 nl Q {q1 {Q}   {emit command}}
-    dict set δ1 q4 w  Q {q2 {Q}   {emit space [lindex $token 1]}}
-    dict set δ1 q4 em Q {q3 {Q}   {emit space [lindex $token 1]}}
-    dict set δ1 q4 lb Q {q1 {B Q} {emit push B}}
-    dict set δ1 q4 dq Q {q3 {}    {emit pop}}
-    dict set δ1 q4 lc Q {q1 {C Q} {emit push C}}
+    M addTransition {q[0-2]} lb S {q1 {B}   {emit enter B}}
+    M addTransition {q[0-2]} dq S {q1 {Q}   {emit enter Q}}
+    M addTransition {q[0-2]} lc S {q1 {C}   {emit enter C}}
+    
+    M addTransition {q[4]}   lb S {q1 {B}   {emit space enter B}}
+    M addTransition {q[4]}   dq S {q1 {Q}   {emit space enter Q}}
+    M addTransition {q[4]}   lc S {q1 {C}   {emit space enter C}}
+    
+    M addTransition {q[12]}  lb B {q1 {B B} {emit enter B}}
+    M addTransition {q[12]}  dq B {q1 {Q B} {emit enter Q}}
+    M addTransition {q[12]}  lc B {q1 {C B} {emit enter C}}
 
-    dict set δ1 q4 sp C {q4 {C}   {emit space {}}}
-    dict set δ1 q4 nl C {q1 {C}   {emit command}}
-    dict set δ1 q4 w  C {q2 {C}   {emit space [lindex $token 1]}}
-    dict set δ1 q4 em C {q3 {C}   {emit space [lindex $token 1]}}
-    dict set δ1 q4 lb C {q1 {B C} {emit push B}}
-    dict set δ1 q4 dq C {q1 {Q C} {emit push Q}}
-    dict set δ1 q4 lc C {q1 {C C} {emit push C}}
-    dict set δ1 q4 rc C {q3 {}    {emit pop}}
+    M addTransition {q[4]}   lb B {q1 {B B} {emit space enter B}}
+    M addTransition {q[4]}   dq B {q1 {Q B} {emit space enter Q}}
+    M addTransition {q[4]}   lc B {q1 {C B} {emit space enter C}}
 
-    dict set δ1 q1 {} S {qf {}    {emit success done}}
-    dict set δ1 q2 {} S {qf {}    {emit success done}}
-    dict set δ1 q3 {} S {qf {}    {emit success done}}
-    dict set δ1 q4 {} S {qf {}    {emit success done}}
-    PDA create M {qe qf q0 q1 q2 q3 q4} {sp w nl lb rb dq lc rc em} {S B Q C} ${δ1} q0 S {qe qf} {
-        set cmdnum 0
-        set commands($cmdnum) {}
-        proc appendToCommand {} {
-            global commands cmdnum token
-            lset commands($cmdnum) end [lindex $commands($cmdnum) end][lindex $token 1]
-        }
-    }
+    M addTransition {q[12]}  lb Q {q1 {B Q} {emit enter B}}
+    M addTransition {q[12]}  lc Q {q1 {C Q} {emit enter C}}
+    
+    M addTransition {q[4]}   lb Q {q1 {B Q} {emit space enter B}}
+    M addTransition {q[4]}   lc Q {q1 {C Q} {emit space enter C}}
+    
+    M addTransition {q[12]}  lb C {q1 {B C} {emit enter B}}
+    M addTransition {q[12]}  dq C {q1 {Q C} {emit enter Q}}
+    M addTransition {q[12]}  lc C {q1 {C C} {emit enter C}}
+
+    M addTransition {q[4]}   lb C {q1 {B C} {emit space enter B}}
+    M addTransition {q[4]}   dq C {q1 {Q C} {emit space enter Q}}
+    M addTransition {q[4]}   lc C {q1 {C C} {emit space enter C}}
+
+    M addTransition {q[1-4]} rb B {q2 {}    {emit leave}}
+    
+    M addTransition {q[124]} dq Q {q3 {}    {emit leave}}
+
+    M addTransition {q[1-4]} rc C {q3 {}    {emit leave}}
+    
 } -body {
     set lex {
     {(\\.|[\w:$!%&'()*,-./?@+<=>^`|~])+}    w
@@ -664,13 +605,16 @@ set code {set fp [open foo r]}
 
     set tokens [::string::token text $lex $code]
     M run [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
+    if no {
     lappend res [M dump]
+    }
     lappend res [M output]
-    M reset
     set res
 } -cleanup {
     M destroy
+    if no {
     unset δ1
+    }
     log::lvSuppressLE i 1
 } -result {}
 
