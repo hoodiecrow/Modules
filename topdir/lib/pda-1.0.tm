@@ -16,7 +16,7 @@ oo::class create Output {
 
 # Q : the set of allowed states
 # Σ : the "alphabet" (set of input symbols)
-# Σε: the union (Σ ∪ ε)
+# Σε: the union (Σ ∪ { ε })
 # Γ : the "stack alphabet" (set of stack symbols)
 # δ : the transition dictionary (Q × Σε × Γ) → (Q × Γ*)
 # s : the initial state
@@ -30,8 +30,7 @@ oo::class create PDA {
 
     constructor args {
         lassign $args tuple script
-        dict set tuple Σε [linsert [dict get $tuple Σ] 0 {}]
-        dict set tuple Γε [linsert [dict get $tuple Γ] 0 {}]
+        dict set tuple Σε [linsert [dict get $tuple Σ] end ε]
         my reset
     }
 
@@ -97,28 +96,66 @@ oo::class create PDA {
             set actionResult [$slave eval $action]
             my dump+ $q $a $X -> $state ${γ} $actionResult $stack
         } else {
-            return -code error [format {Illegal transition (%s,%s,%s)} $q $a $X]
+            return -code error [format {illegal transition (%s,%s,%s)} $q $a $X]
         }
     }
 
-    method run tokens {
-        for {set i 0} {$i <= [llength $tokens]} {incr i} {
-            set token [lindex $tokens $i]
-            $slave eval [list set token $token]
-            lassign $token a
-            if {$a ni [dict get $tuple Σε]} {
-                my dump+ [format {Illegal input token "%s" at index #%d} $token $i]
-                break
-            }
-            try {
-                my δ $state $a [lindex $stack 0]
-            } on error msg {
-                my dump+ Error:\ $msg
+    method Check {} {
+        set res 1
+        dict with tuple {}
+        if {$s ni $Q} {
+            my dump+ [format {start state "%s" not in states set (%s)} $s [join $Q {, }]]
+            set res 0
+        }
+        if {$Z ni ${Γ}} {
+            my dump+ [format {initial stack symbol "%s" not in stack symbol set (%s)} $Z [join ${Γ} {, }]]
+            set res 0
+        }
+        foreach f $F {
+            if {$f ni $Q} {
+                my dump+ [format {accepting state "%s" not in states set (%s)} $f [join $Q {, }]]
+                set res 0
                 break
             }
         }
-        set result [expr {$state in [dict get $tuple F]}]
-        my dump+ $result
+        return $res
+    }
+
+    method CheckInput a {
+        set res 1
+        dict with tuple {}
+        if {$a ni ${Σ} && $a ne "ε"} {
+            my dump+ [format {input symbol "%s" not in alphabet (%s)} $a [join [linsert ${Σ} end ε] {, }]]
+            set res 0
+        }
+        return $res
+    }
+
+    method read tokens {
+        if {[my Check]} {
+            for {set i 0} {$i <= [llength $tokens]} {incr i} {
+                if {$i ne [llength $tokens]} {
+                    set token [lindex $tokens $i]
+                } else {
+                    set token ε
+                }
+                lassign $token a
+                if {![my CheckInput $a]} {
+                    break
+                }
+                $slave eval [list set token $token]
+                try {
+                    my δ $state $a [lindex $stack 0]
+                } on error msg {
+                    my dump+ Error:\ $msg
+                    break
+                }
+            }
+            set result [expr {$state in [dict get $tuple F]}]
+            my dump+ $result
+        } else {
+            set result 0
+        }
         return $result
     }
 }
