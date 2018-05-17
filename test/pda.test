@@ -68,6 +68,19 @@ test pda-1.3 {} -setup {
 
 test pda-1.4 {} -setup {
     set res {}
+    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    oo::objdefine M mixin -append Log
+} -body {
+    M read {0 1 1}
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result 0 -output {error     illegal transition (q1,1,S)
+}
+
+
+test pda-1.5 {} -setup {
+    set res {}
     PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
     oo::objdefine M mixin -append Slave
     M addTransition q0      ε S {qe {}    {emit success "no input"}}
