@@ -1,92 +1,99 @@
 
-trace add variable command write {apply {{a b c} {puts \$command=$::command}}}
-trace add variable contexts write {apply {{a b c} {puts \$contexts=$::contexts}}}
-
-proc init {} {
-    global word command commands contexts results
-    lassign {} word command commands contexts
-}
-
-proc add {str args} {
-    appendWord $str
-    uplevel 1 $args
-}
-
-proc beginWord args {
-    global word
-    set word {}
-}
-
-proc appendWord {str args} {
-    global word
-    append word $str
-}
-
-proc endWord args {
-    global word
-    return $word
-}
-
-proc beginCommand args {
-    global command
-    set command {}
-    beginWord
-}
-
-proc endCommand args {
-    global command
-    set w [endWord]
-    if {$w ne {}} {
-        lappend command $w
+proc action {what args} {
+    global word commands contexts cmdnum ctxnum cmddict ctxdict
+    switch $what {
+        init {
+            set word {}
+            set commands {}
+            set cmdnum 0
+            set cmddict {}
+            set contexts {}
+            set ctxnum 0
+            set ctxdict {}
+        }
+        bctx {
+            set args [lassign $args str]
+            incr ctxnum
+            dict set ctxdict $ctxnum [list $str]
+            set contexts [linsert $contexts 0 $ctxnum]
+            set args [action bcmd {*}$args]
+        }
+        ectx {
+            set args [action ecmd {*}$args]
+            set contexts [lassign $contexts idx]
+            set word <$idx>
+        }
+        bcmd {
+            incr cmdnum
+            set commands [linsert $commands 0 $cmdnum]
+            set args [action bwrd {*}$args]
+        }
+        ecmd {
+            set args [action ewrd {*}$args]
+            set commands [lassign $commands idx]
+            dict lappend ctxdict [lindex $contexts 0] ($idx)
+        }
+        bwrd {
+            set word {}
+        }
+        awrd {
+            set args [lassign $args str]
+            append word $str
+        }
+        ewrd {
+            dict lappend cmddict [lindex $commands 0] $word
+        }
+        succ {
+            set args [lassign $args str]
+            set args [action ectx {*}$args]
+        }
+        default {
+            ;
+        }
     }
-    appendContext $command
+    return $args
 }
 
-proc command args {
-    global word command contexts
-    endCommand
-    beginCommand
+proc init args {
+    set args [action init {*}$args]
     uplevel 1 $args
 }
 
-proc enter {str args} {
-    beginContext $str
+proc enter args {
+    set args [action bctx {*}$args]
     uplevel 1 $args
-}
-
-proc beginContext {str args} {
-    # $str is the context type: SBCQ
-    global contexts
-    lappend contexts {}
-    beginCommand
-}
-
-proc appendContext cmd {
-    global contexts
-    set context [lindex $contexts end]
-    set contexts [lrange $contexts 0 end-1]
-    lappend context $cmd
-    lappend contexts $context
-}
-
-proc endContext args {
-    global contexts results
-    endCommand
-    lappend results [lindex $contexts end]
-    set contexts [lrange $contexts 0 end-1]
 }
 
 proc leave args {
-    endContext
+    set args [action ectx {*}$args]
+    uplevel 1 $args
+}
+
+proc add args {
+    global word
+    set args [action awrd {*}$args]
+    uplevel 1 $args
+}
+
+proc command args {
+    set args [action ecmd {*}$args]
+    set args [action bcmd {*}$args]
     uplevel 1 $args
 }
 
 proc space args {
-    endWord
-    beginWord
+    set args [action ewrd {*}$args]
+    set args [action bwrd {*}$args]
     uplevel 1 $args
 }
 
-proc success str {
+proc success args {
+    global cmddict ctxdict
+    set args [action succ {*}$args]
+    foreach k [lsort -integer [dict keys $cmddict]] {
+        puts [format {%d: %s} $k [dict get $cmddict $k]]
+    }
+    foreach k [lsort -integer [dict keys $ctxdict]] {
+        puts [format {%d: %s} $k [dict get $ctxdict $k]]
+    }
 }
-

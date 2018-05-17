@@ -2,16 +2,79 @@ package require log
 
 oo::class create Dump {
     variable dump
-    method dump+ args {lappend dump $args}
+    method Reset args {set dump {} ; next {*}$args}
     method dump {} {set dump}
-    method reset args {set dump {} ; next {*}$args}
+    method Dump args {lappend dump $args}
+    method Error msg {
+        my Dump $msg
+        return -code error [format {Error: %s} $msg]
+    }
+    method Assert {cond {msg {}} args} {
+        if {![uplevel 1 [list expr $cond]]} {
+            set prefix [lindex [info level -1] 1]
+            if {$msg eq {}} {
+                my Error [format {%s: assertion failed: %s} $prefix $cond]
+            } else {
+                my Error [format {%s: %s} $prefix [format $msg {*}$args]]
+            }
+        }
+    }
+    method Ensure {cond msg args} {
+        if {![uplevel 1 [list expr $cond]]} {
+            my Error [format $msg {*}$args]
+        }
+    }
 }
 
-oo::class create Output {
-    variable output
+oo::class create Stack {
+    variable stack tuple
+    method Reset args {set stack [dict get $tuple Z] ; next {*}$args}
+    method stackop args {
+        if {[llength $args] eq 1 && [lindex $args 0] eq "-"} {
+            return
+        }
+        foreach arg $args {
+            my Ensure {$arg in [dict get $tuple Γ]} {illegal stack token "%s"} $arg
+        }
+        set Z [dict get $tuple Z]
+        if {[my StackTop] eq $Z} {
+            set stack [linsert $args end $Z]
+        } else {
+            set stack [lreplace $stack 0 0 {*}$args]
+        }
+    }
+    method StackTop {} {lindex $stack 0}
+    method GetStack {} {set stack}
+}
+
+oo::class create Slave {
+    variable slave output
+    method Reset args {
+        catch {interp delete $slave}
+        set slave [my InitSlave]
+        set output {}
+        next {*}$args
+    }
+    method InitSlave {} {
+        set i [interp create -safe]
+        $i alias emit [self namespace]::my OutputCollect
+        $i alias vars [self namespace]::my SlaveVars
+        return $i
+    }
+    method SlaveVars vals {
+        $slave eval {unset -nocomplain {*}[info vars {[1-9]*}]}
+        $slave eval [list set 0 $vals]
+        for {set i 1} {$i <= [llength $vals]} {incr i} {
+            $slave eval [list set $i [lindex $vals $i-1]]
+        }
+    }
+    method Eval args {
+        if {[llength $args] > 0} {
+            $slave eval {*}$args
+        }
+    }
     method OutputCollect args {lappend output {*}$args}
     method output {} {set output}
-    method reset args {set output {} ; next {*}$args}
 }
 
 # Q : the set of allowed states
@@ -24,136 +87,102 @@ oo::class create Output {
 # F : the set of accept states
 # 
 oo::class create PDA {
-    mixin Dump Output
+    mixin Stack
 
-    variable tuple script state stack token slave
+    variable tuple
 
     constructor args {
-        lassign $args tuple script
-        dict set tuple Σε [linsert [dict get $tuple Σ] end ε]
-        my reset
+        lassign $args tuple
+        if {![dict exists $tuple δ]} {
+            dict set tuple δ {}
+        }
     }
 
-    method reset {} {
-        set state [dict get $tuple s]
-        set stack [dict get $tuple Z]
-        set token {}
-        catch {interp delete $slave}
-        set slave [my InitSlave $script]
+    foreach m {Eval Dump Error Assert Reset} {
+        forward $m list
     }
 
-    method InitSlave s {
-        set i [interp create -safe]
-        $i alias emit [self namespace]::my OutputCollect
-        $i eval $s
-        return $i
+    method Ensure {cond msg args} {
+        if {![uplevel 1 [list expr $cond]]} {
+            return -code error [format $msg {*}$args]
+        }
     }
 
     method show key {
         dict get $tuple $key
     }
 
-    method stackop args {
-        foreach arg $args {
-            if {$arg ni [dict get $tuple Γ]} {
-                return -code error [format {Illegal stack token "%s"} $arg]
-            }
-        }
-        set Z [dict get $tuple Z]
-        if {[lindex $stack 0] eq $Z} {
-            set stack [linsert $args end $Z]
-        } else {
-            set stack [lreplace $stack 0 0 {*}$args]
-        }
-    }
-
     method addTransition {qp ap Xp t} {
         log::log d [info level 0]
-        set d [dict get $tuple δ]
-        set keys0 [lmap v [dict get $tuple Q] {if {[string match $qp $v]} {set v} continue}]
-        set keys1 [lmap v [dict get $tuple Σε] {if {[string match $ap $v]} {set v} continue}]
-        set keys2 [lmap v [dict get $tuple Γ] {if {[string match $Xp $v]} {set v} continue}]
+        dict with tuple {
+            set keys0 [lsearch -glob -all -inline $Q $qp]
+            set keys1 [lsearch -glob -all -inline [linsert ${Σ} end ε] $ap]
+            set keys2 [lsearch -glob -all -inline ${Γ} $Xp]
+        }
+        foreach keys [list $keys0 $keys1 $keys2] pattern [list $qp $ap $Xp] {
+            my Assert {[llength $keys] > 0} {no matching keys for "%s"} $pattern
+        }
         foreach k0 $keys0 {
             foreach k1 $keys1 {
                 foreach k2 $keys2 {
-                    dict set d $k0 $k1 $k2 $t
+                    dict set tuple δ $k0 $k1 $k2 $t
                 }
             }
         }
-        log::log d \$d=$d
-        dict set tuple δ $d
     }
 
     method δ {q a X} {
-        if {[dict exists [dict get $tuple δ] $q $a $X]} {
-            lassign [dict get [dict get $tuple δ] $q $a $X] state γ action
-            if {$state ni [dict get $tuple Q]} {
-                return -code error [format {illegal state "%s" reached in transition (%s,%s,%s)} $q $a $X]
-            }
-            if {${γ} ne "-"} {
-                my stackop {*}${γ}
-            }
-            set actionResult [$slave eval $action]
-            my dump+ $q $a $X -> $state ${γ} $actionResult $stack
-        } else {
-            return -code error [format {illegal transition (%s,%s,%s)} $q $a $X]
-        }
+        log::log d [info level 0]
+        set transition [format {(%s,%s,%s)} $q $a $X]
+        set transmat [dict get $tuple δ]
+        my Ensure {[dict exists $transmat $q $a $X]} {illegal transition %s} $transition
+        lassign [dict get $transmat $q $a $X] state γ action
+        my Ensure {$state in [dict get $tuple Q]} {illegal state "%s" reached in transition %s} $state $transition
+        # TODO validate γ
+        my stackop {*}${γ}
+        my Eval $action
+        my Dump $transition -> $state [my GetStack]
+        return $state
     }
 
     method Check {} {
-        set res 1
         dict with tuple {}
-        if {$s ni $Q} {
-            my dump+ [format {start state "%s" not in states set (%s)} $s [join $Q {, }]]
-            set res 0
-        }
-        if {$Z ni ${Γ}} {
-            my dump+ [format {initial stack symbol "%s" not in stack symbol set (%s)} $Z [join ${Γ} {, }]]
-            set res 0
-        }
-        foreach f $F {
-            if {$f ni $Q} {
-                my dump+ [format {accepting state "%s" not in states set (%s)} $f [join $Q {, }]]
-                set res 0
-                break
-            }
-        }
-        return $res
+        my Assert {$s in $Q} {start state "%s" not in states set (%s)} $s [join $Q {, }]
+        my Assert {$Z in ${Γ}} {initial stack symbol "%s" not in stack symbol set (%s)} $Z [join ${Γ} {, }]
+        set fs [lmap f $F {if {$f in $Q} {set f} continue}]
+        my Assert {[llength $fs] > 0} \
+            {accepting state%s (%s) not in states set (%s)} \
+            [expr {[llength $fs] > 1 ? "s" : ""}] \
+            [join $f {, }] \
+            [join $Q {, }]
     }
 
-    method CheckInput a {
-        set res 1
-        dict with tuple {}
-        if {$a ni ${Σ} && $a ne "ε"} {
-            my dump+ [format {input symbol "%s" not in alphabet (%s)} $a [join [linsert ${Σ} end ε] {, }]]
-            set res 0
+    method iterate tokens {
+        set alpha [linsert [dict get $tuple Σ] end ε]
+        dict with tuple {set state $s}
+        foreach token [linsert $tokens end ε] {
+            lassign $token a
+            my Ensure {$a in $alpha} {input symbol "%s" not in alphabet (%s)} $a [join $alpha {, }]
+            my Eval [list vars $token]
+            try {
+                my δ $state $a [my StackTop]
+            } on ok state {
+                # no op
+            } on error msg {
+                return 0
+            }
         }
-        return $res
+        return [expr {$state in [dict get $tuple F]}]
     }
 
-    method read tokens {
-        if {[my Check]} {
-            for {set i 0} {$i <= [llength $tokens]} {incr i} {
-                if {$i ne [llength $tokens]} {
-                    set token [lindex $tokens $i]
-                } else {
-                    set token ε
-                }
-                lassign $token a
-                if {![my CheckInput $a]} {
-                    break
-                }
-                $slave eval [list set token $token]
-                try {
-                    my δ $state $a [lindex $stack 0]
-                } on error msg {
-                    my dump+ Error:\ $msg
-                    break
-                }
-            }
-            set result [expr {$state in [dict get $tuple F]}]
-            my dump+ $result
-        } else {
+    method read {tokens args} {
+        my Reset
+        my Eval {*}$args
+        try {
+            my Check
+        } on ok {} {
+            set result [my iterate $tokens]
+        } on error {} {
             set result 0
         }
         return $result
