@@ -13,12 +13,12 @@ package require string::token
 
 source ~/code/tcldocs/test/snippets.tcl
 
-dict set δ q0 ε S {qe {}}
-dict set δ q0 0 S {q0 Z}
-dict set δ q0 0 Z {q0 {Z Z}}
-dict set δ q0 1 Z {q1 {}}
-dict set δ q1 1 Z {q1 {}}
-dict set δ q1 ε S {qf {}}
+dict set δ (q0,ε,S) {qe {}}
+dict set δ (q0,0,S) {q0 Z}
+dict set δ (q0,0,Z) {q0 {Z Z}}
+dict set δ (q0,1,Z) {q1 {}}
+dict set δ (q1,1,Z) {q1 {}}
+dict set δ (q1,ε,S) {qf {}}
 
 test pda-1.0 {} -setup {
     set res {}
@@ -63,7 +63,7 @@ test pda-1.3 {} -setup {
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
-} -result {{(q0,0,S) -> q0 {Z S}} {(q0,1,Z) -> q1 S} {{illegal transition (q1,1,S)}}}
+} -result {{(q0,0,S) -> q0 {Z S}} {(q0,1,Z) -> q1 S} {illegal transition (q1,1,S)}}
 
 
 test pda-1.4 {} -setup {
@@ -80,6 +80,15 @@ test pda-1.4 {} -setup {
 
 
 test pda-1.5 {} -setup {
+    set res {}
+} -body {
+    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q666 Z S F {qe qf}]
+} -cleanup {
+    log::lvSuppressLE i 1
+} -result {illegal start state "q666"} -returnCodes error
+
+
+test pda-1.6 {} -setup {
     set res {}
     PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
     oo::objdefine M mixin -append Slave
@@ -152,7 +161,7 @@ test pda-2.1 {} -setup {
 } -result {Error: addTransition: no matching keys for "nl"} -returnCodes error
 
 
-test pda-2.2 {} -setup {
+test pda-2.2 {} -constraints {} -setup {
     set res {}
     PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
@@ -176,21 +185,21 @@ test pda-2.2 {} -setup {
     # q3    in word, no more text
     # q4    interword space or after command
     # 20180515 expands from 25 calls to 103 rules
-    M addTransition q0        ε  S {qe {}    {emit success "no input"}}
-    M addTransition {q[1-4]}  ε  S {qf {}    {emit success done}}
+    M addTransition q0       ε  S {qe {}    {emit success "no input"}}
+    M addTransition {q[1-4]} ε  S {qf {}    {emit success done}}
 
-    M addTransition q0        w  S {q2 -     {emit add $2}}
-    M addTransition {q[12]}   w  * {q2 -     {emit add $2}}
-    M addTransition q4        w  * {q2 -     {emit space add $2}}
+    M addTransition q0       w  S {q2 -     {emit add $2}}
+    M addTransition {q[12]}  w  * {q2 -     {emit add $2}}
+    M addTransition q4       w  * {q2 -     {emit space add $2}}
 
-    M addTransition q4        em * {q3 -     {emit space add $2}}
+    M addTransition q4       em * {q3 -     {emit space add $2}}
 
-    M addTransition q0        nl S {q1 {}}
-    M addTransition {q[1-4]}  nl * {q1 -     {emit command}}
+    M addTransition q0       nl S {q1 {}}
+    M addTransition {q[1-4]} nl * {q1 -     {emit command}}
 
-    M addTransition q1        sp * {q1 -}
-    M addTransition {q[01]}   sp S {q1 {}}
-    M addTransition {q[2-4]}  sp * {q4 -}
+    M addTransition q1       sp * {q1 -}
+    M addTransition {q[01]}  sp S {q1 {}}
+    M addTransition {q[2-4]} sp * {q4 -}
 
     M addTransition {q[0-2]} lb S {q1 {B}   {emit enter B}}
     M addTransition {q[0-2]} dq S {q1 {Q}   {emit enter Q}}
@@ -249,6 +258,183 @@ test pda-2.2 {} -setup {
     M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $script
     lappend res [M output]
     set res
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {{init enter S add set space add fp space enter B add open space enter Q add {D:\\RWTH\\Mini} space add {thesis\\EclipseTCL\\TCL} space add {trial\\excelv1.csv} leave space add r leave command add set space add secondColumnData space add {{}} command add while space enter C enter B add gets space add {$fp} space add line leave add >=0 leave space enter C command add if space enter C enter B add llength space add {$line} leave add >0 leave space enter C command add lappend space add secondColumnData space enter B add lindex space enter B add split space add {$line} space enter Q add , leave leave space add 1 leave command leave command leave command add close space add {$fp} command add puts space add {$secondColumnData} success done}}
+
+
+test pda-2.3 {} -constraints {} -setup {
+    set res {}
+    PDA create M {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {sp w nl lb rb dq lc rc em}
+        Γ {S B Q C}
+        s q0
+        Z S
+        F {qe qf}
+    }
+    set script {
+        proc action {what {str {}}} {
+            global word commands contexts cmdnum ctxnum cmddict ctxdict
+            switch $what {
+                init {
+                    set word {}
+                    set commands {}
+                    set cmdnum 0
+                    set cmddict {}
+                    set contexts {}
+                    set ctxnum 0
+                    set ctxdict {}
+                    emit init
+                }
+                bctx {
+                    incr ctxnum
+                    dict set ctxdict $ctxnum [list $str]
+                    set contexts [linsert $contexts 0 $ctxnum]
+                    action bcmd
+                }
+                ectx {
+                    action ecmd
+                    set contexts [lassign $contexts idx]
+                    set word <$idx>
+                }
+                bcmd {
+                    incr cmdnum
+                    set commands [linsert $commands 0 $cmdnum]
+                    action bwrd
+                }
+                ecmd {
+                    action ewrd
+                    set commands [lassign $commands idx]
+                    dict lappend ctxdict [lindex $contexts 0] ($idx)
+                }
+                bwrd {
+                    set word {}
+                }
+                awrd {
+                    append word $str
+                }
+                ewrd {
+                    emit word $word
+                    set cmdidx [lindex $commands 0]
+                    dict lappend cmddict $cmdidx $word
+                    set cmdwix [expr {[llength [dict get $cmddict $cmdidx]] - 1}]
+                    set cmdtype [lindex [dict get $cmddict $cmdidx] 0]
+                    if {$cmdwix eq 0} {
+                        emit command $word
+                    }
+                    switch $cmdtype {
+                        if - while {
+                            if {$cmdwix eq 1} {
+                                emit [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
+                            } elseif {$cmdwix eq 2} {
+                                emit [format {command %s: script argument "%s"} $cmdtype [stringize $word]]
+                            }
+                        }
+                        default {
+                        }
+                    }
+                    set ctxidx [lindex $contexts 0]
+                    set ctxtype [lindex [dict get $ctxdict $ctxidx] 0]
+                    if no {
+                    emit [format {command %2d/%d in %2d%s: "%s"} $cmdidx $cmdwix $ctxidx $ctxtype $word]
+                    }
+                }
+                succ {
+                    action ectx
+                    emit success $str
+                }
+                default {
+                    ;
+                }
+            }
+        }
+        action init
+        action bctx S
+    }
+    oo::objdefine M mixin -append Dump Slave
+    # qe    script empty
+    # qf    script finished
+    # q0    start state, before script
+    #
+    # q1    before command
+    # q2    in word, more text may follow
+    # q3    in word, no more text
+    # q4    interword space or after command
+    M addTransition q0       ε  S {qe {}    {action succ "no input"}}
+    M addTransition {q[1-4]} ε  S {qf {}    {action succ done}}
+
+    M addTransition q0       w  S {q2 -     {action awrd $2}}
+    M addTransition {q[12]}  w  * {q2 -     {action awrd $2}}
+    M addTransition q4       w  * {q2 -     {action ewrd ; action bwrd ; action awrd $2}}
+
+    M addTransition q4       em * {q3 -     {action ewrd ; action bwrd ; action awrd $2}}
+
+    M addTransition q0       nl S {q1 {}}
+    M addTransition {q[1-4]} nl * {q1 -     {action ecmd ; action bcmd}}
+
+    M addTransition q1       sp * {q1 -}
+    M addTransition {q[01]}  sp S {q1 {}}
+    M addTransition {q[2-4]} sp * {q4 -}
+
+    M addTransition {q[0-2]} lb S {q1 {B}   {action bctx B}}
+    M addTransition {q[0-2]} dq S {q1 {Q}   {action bctx Q}}
+    M addTransition {q[0-2]} lc S {q1 {C}   {action bctx C}}
+    
+    M addTransition {q[4]}   lb S {q1 {B}   {action ewrd ; action bwrd ; action bctx B}}
+    M addTransition {q[4]}   dq S {q1 {Q}   {action ewrd ; action bwrd ; action bctx Q}}
+    M addTransition {q[4]}   lc S {q1 {C}   {action ewrd ; action bwrd ; action bctx C}}
+    
+    M addTransition {q[12]}  lb B {q1 {B B} {action bctx B}}
+    M addTransition {q[12]}  dq B {q1 {Q B} {action bctx Q}}
+    M addTransition {q[12]}  lc B {q1 {C B} {action bctx C}}
+
+    M addTransition {q[4]}   lb B {q1 {B B} {action ewrd ; action bwrd ; action bctx B}}
+    M addTransition {q[4]}   dq B {q1 {Q B} {action ewrd ; action bwrd ; action bctx Q}}
+    M addTransition {q[4]}   lc B {q1 {C B} {action ewrd ; action bwrd ; action bctx C}}
+
+    M addTransition {q[12]}  lb Q {q1 {B Q} {action bctx B}}
+    M addTransition {q[12]}  lc Q {q1 {C Q} {action bctx C}}
+    
+    M addTransition {q[4]}   lb Q {q1 {B Q} {action ewrd ; action bwrd ; action bctx B}}
+    M addTransition {q[4]}   lc Q {q1 {C Q} {action ewrd ; action bwrd ; action bctx C}}
+    
+    M addTransition {q[12]}  lb C {q1 {B C} {action bctx B}}
+    M addTransition {q[12]}  dq C {q1 {Q C} {action bctx Q}}
+    M addTransition {q[12]}  lc C {q1 {C C} {action bctx C}}
+
+    M addTransition {q[4]}   lb C {q1 {B C} {action ewrd ; action bwrd ; action bctx B}}
+    M addTransition {q[4]}   dq C {q1 {Q C} {action ewrd ; action bwrd ; action bctx Q}}
+    M addTransition {q[4]}   lc C {q1 {C C} {action ewrd ; action bwrd ; action bctx C}}
+
+    M addTransition {q[1-4]} rb B {q2 {}    {action ectx}}
+    
+    M addTransition {q[124]} dq Q {q3 {}    {action ectx}}
+
+    M addTransition {q[1-4]} rc C {q3 {}    {action ectx}}
+    
+} -body {
+    set lex {
+    {(\\.|[\w:$!%&'()*,-./?@+<=>^`|~])+}    w
+    {[ \t]+}                                sp
+    {\n}                                    nl
+    {\;}                                    sc
+    {\#}                                    ns
+    {\"\"|\{\}|\[\]}                        em
+    {\"}                                    dq
+    {\{\*\}}                                ex
+    {\{}                                    lc
+    {\}}                                    rc
+    {\[}                                    lb
+    {\]}                                    rb
+    .                                       Other
+    }
+    set code [lindex $snippets 0]
+    set tokens [::string::token text $lex $code]
+    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $script
+    M output
+    M dump
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1

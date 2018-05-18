@@ -1,5 +1,40 @@
 package require string::token
 
+proc iterate args {
+    for {set i 0} {$i < [llength $args]} {incr i} {
+        set a [lindex $args $i]
+        switch $a {
+            init {
+                action $a
+            }
+            enter {
+                action bctx [lindex $args [incr i]]
+            }
+            leave {
+                action ectx
+            }
+            command {
+                action ecmd
+                action bcmd
+            }
+            space {
+                action ewrd
+                action bwrd
+            }
+            add {
+                action awrd [lindex $args [incr i]]
+            }
+            success {
+                action succ [lindex $args [incr i]]
+                report
+            }
+            default {
+                ;
+            }
+        }
+    }
+}
+
 proc action {what args} {
     global word commands contexts cmdnum ctxnum cmddict ctxdict
     switch $what {
@@ -53,13 +88,15 @@ proc action {what args} {
             switch $cmdtype {
                 if - while {
                     if {$cmdwix eq 1} {
-                        puts [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
+                        emit [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
                     } elseif {$cmdwix eq 2} {
-                        puts [format {command %s: script argument "%s"} $cmdtype [stringize $word]]
+                        emit [format {command %s: script argument "%s"} $cmdtype [stringize $word]]
                     }
                 }
                 default {
-                    ;
+                    if {$cmdwix eq 0} {
+                        emit command $word
+                    }
                 }
             }
             set ctxidx [lindex $contexts 0]
@@ -75,44 +112,6 @@ proc action {what args} {
         }
     }
     return $args
-}
-
-proc init args {
-    set args [action init {*}$args]
-    uplevel 1 $args
-}
-
-proc enter args {
-    set args [action bctx {*}$args]
-    uplevel 1 $args
-}
-
-proc leave args {
-    set args [action ectx {*}$args]
-    uplevel 1 $args
-}
-
-proc add args {
-    global word
-    set args [action awrd {*}$args]
-    uplevel 1 $args
-}
-
-proc command args {
-    set args [action ecmd {*}$args]
-    set args [action bcmd {*}$args]
-    uplevel 1 $args
-}
-
-proc space args {
-    set args [action ewrd {*}$args]
-    set args [action bwrd {*}$args]
-    uplevel 1 $args
-}
-
-proc success args {
-    set args [action succ {*}$args]
-    report
 }
 
 proc report {} {
