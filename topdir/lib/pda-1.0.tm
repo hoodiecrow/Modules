@@ -22,11 +22,16 @@ oo::class create Stack {
 }
 
 oo::class create Slave {
-    variable slave output
+    variable slave output aliases
     method Reset args {
         catch {interp delete $slave}
         set slave [my InitSlave]
         set output {}
+        if {[info exists aliases]} {
+            foreach alias $aliases {
+                $slave alias {*}$alias
+            }
+        }
         next {*}$args
     }
     method InitSlave {} {
@@ -47,8 +52,30 @@ oo::class create Slave {
             $slave eval {*}$args
         }
     }
+    method alias args {
+        lappend aliases $args
+    }
     method OutputCollect args {lappend output {*}$args}
     method output {} {set output}
+}
+
+proc ::tcl::mathfunc::subset {a b} {
+    foreach item $a {
+        if {$item ni $b} {
+            return 0
+        }
+    }
+    return 1
+}
+
+proc ::tcl::mathfunc::diff {a b} {
+    return [lmap item $a {
+        if {$item ni $b} {
+            set item
+        } else {
+            continue
+        }
+    }]
 }
 
 # Q : the set of allowed states
@@ -80,9 +107,7 @@ oo::class create PDA {
         dict with tuple {}
         my Ensure {$s in $Q} {illegal start state "%s"} $s
         my Ensure {$Z in ${Γ}} {illegal stack symbol "%s"} $Z
-        set fs [lmap f $F {if {$f in $Q} {set f} continue}]
-        my Ensure {[llength $fs] > 1} {illegal accepting states (%s)} [join $fs {, }]
-        my Ensure {[llength $fs] > 0} {illegal accepting state "%s"} $f
+        my Ensure {subset($F, $Q)} {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]
     }
 
     method FormatTransition {q a X} {
@@ -95,9 +120,9 @@ oo::class create PDA {
             set keys1 [lsearch -glob -all -inline [linsert ${Σ} end ε] $ap]
             set keys2 [lsearch -glob -all -inline ${Γ} $Xp]
         }
-        foreach keys [list $keys0 $keys1 $keys2] pattern [list $qp $ap $Xp] {
-            my Assert {[llength $keys] > 0} {no matching keys for "%s"} $pattern
-        }
+        my Assert {[llength $keys0] > 0} {no matching keys for "%s"} $qp
+        my Assert {[llength $keys1] > 0} {no matching keys for "%s"} $ap
+        my Assert {[llength $keys2] > 0} {no matching keys for "%s"} $Xp
         foreach k0 $keys0 {
             foreach k1 $keys1 {
                 foreach k2 $keys2 {
@@ -108,38 +133,27 @@ oo::class create PDA {
     }
 
     method NewState trans {
-        log::log d [info level 0]
         dict with tuple {}
-        my Ensure {[dict exists ${δ} $trans]} {illegal transition %s} $trans
-        lassign [dict get ${δ} $trans] state γ action
-        my StackAdjust {*}${γ}
-        my Eval $action
-        return $state
-    }
-
-    method Iterate tokens {
-        set alpha [linsert [dict get $tuple Σ] end ε]
-        dict with tuple {set state $s}
-        foreach token [linsert $tokens end ε] {
-            lassign $token a
-            my Ensure {$a in $alpha} {illegal input symbol "%s"} $a
-            my Eval [list vars $token]
-            set trans [my FormatTransition $state $a [my StackTop]]
-            try {
-                my NewState $trans
-            } on ok state {
-                my Note [list $trans -> $state [my GetStack]]
-                my Ensure {$state in $Q} {illegal state "%s" reached in transition %s} $state $trans
-            } on error {} {
-                return 0
-            }
-        }
-        return [expr {$state in $F}]
+        return []
     }
 
     method read {tokens args} {
         my Reset
         my Eval {*}$args
-        return [my Iterate $tokens]
+        dict with tuple {set state $s}
+        foreach token [linsert $tokens end ε] {
+            lassign $token a
+            my Eval [list vars $token]
+            set trans [my FormatTransition $state $a [my StackTop]]
+            if {![dict exists ${δ} $trans]} {
+                my Log error [format {illegal transition %s} $trans]
+                return 0
+            }
+            lassign [dict get ${δ} $trans] state γ action
+            my StackAdjust {*}${γ}
+            my Eval $action
+            my Note [list $trans -> $state [my GetStack]]
+        }
+        return [expr {$state in $F}]
     }
 }
