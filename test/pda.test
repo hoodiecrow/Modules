@@ -323,14 +323,15 @@ test pda-2.3 {} -constraints {} -setup {
                     set cmdwix [expr {[llength [dict get $cmddict $cmdidx]] - 1}]
                     set cmdtype [lindex [dict get $cmddict $cmdidx] 0]
                     if {$cmdwix eq 0} {
-                        emit $word
+                        dict lappend ::output commands $word
                     }
                     switch $cmdtype {
                         if - while {
                             if {$cmdwix eq 1} {
-                                emit [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
-                            } elseif {$cmdwix eq 2} {
-                                emit [format {command %s: script argument "%s"} $cmdtype [stringize $word]]
+                                if no {
+                                my Note [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
+                                }
+                                dict lappend ::output expressions [stringize $word]
                             }
                         }
                         default {
@@ -344,6 +345,10 @@ test pda-2.3 {} -constraints {} -setup {
                 }
                 succ {
                     action ectx
+                    dict for {k v} $::output {
+                        dict set ::output $k [lsort -unique -dictionary $v]
+                    }
+                    emit {*}$::output
                 }
                 default {
                     ;
