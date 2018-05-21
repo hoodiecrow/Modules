@@ -90,8 +90,7 @@ test pda-1.5 {} -setup {
 
 test pda-1.6 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
-    oo::objdefine M mixin -append Slave
+    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}] [PDASlave new]
     M addTransition q0      ε S {qe {}    {emit success "no input"}}
     M addTransition q0      0 S {q0 Z     {emit LVL [incr n]}}
     M addTransition q0      0 Z {q0 {Z Z} {emit LVL [incr n]}}
@@ -119,8 +118,7 @@ test pda-2.0 {} -setup {
         s q0
         Z S
         F {qe qf}
-    }
-    oo::objdefine M mixin -append Slave
+    } [PDASlave new]
     M addTransition {q[0-4]} nl S {q0 {}    {}}
     M addTransition q0       ε  S {qe {}    {emit success "no input"}}
     M addTransition q0       sp S {q0 {}    {}}
@@ -151,8 +149,8 @@ test pda-2.1 {} -setup {
         s q0
         Z S
         F {qe qf}
-    }
-    oo::objdefine M mixin -append Dump Slave
+    } [PDASlave new]
+    oo::objdefine M mixin -append Dump
 } -body {
     M addTransition {q[0-4]} nl S {q0 {}    {}}
 } -cleanup {
@@ -170,12 +168,11 @@ test pda-2.2 {} -constraints {} -setup {
         s q0
         Z S
         F {qe qf}
-    }
+    } [PDASlave new]
     set script {
         emit init
         emit enter S
     }
-    oo::objdefine M mixin -append Slave
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -266,15 +263,7 @@ test pda-2.2 {} -constraints {} -setup {
 
 test pda-2.3 {} -constraints {} -setup {
     set res {}
-    PDA create M {
-        Q {qe qf q0 q1 q2 q3 q4}
-        Σ {sp w nl lb rb dq lc rc em}
-        Γ {S B Q C}
-        s q0
-        Z S
-        F {qe qf}
-    }
-    set script {
+    set slave [PDASlave new {
         proc action {what {str {}}} {
             global word commands contexts cmdnum ctxnum cmddict ctxdict
             switch $what {
@@ -390,11 +379,21 @@ test pda-2.3 {} -constraints {} -setup {
             }
             return $res
         }
+    }]
+    $slave alias tokenize string::token text
+    PDA create M {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {sp w nl lb rb dq lc rc em}
+        Γ {S B Q C}
+        s q0
+        Z S
+        F {qe qf}
+    } $slave
+    set script {
         action init
         action bctx S
     }
-    oo::objdefine M mixin -append Dump Slave
-    M alias tokenize string::token text
+    oo::objdefine M mixin -append Dump
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
