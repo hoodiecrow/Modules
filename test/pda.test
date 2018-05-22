@@ -260,12 +260,59 @@ test pda-2.2 {} -constraints {} -setup {
     log::lvSuppressLE i 1
 } -result {{init enter S add set space add fp space enter B add open space enter Q add {D:\\RWTH\\Mini} space add {thesis\\EclipseTCL\\TCL} space add {trial\\excelv1.csv} leave space add r leave command add set space add secondColumnData space add {{}} command add while space enter C enter B add gets space add {$fp} space add line leave add >=0 leave space enter C command add if space enter C enter B add llength space add {$line} leave add >0 leave space enter C command add lappend space add secondColumnData space enter B add lindex space enter B add split space add {$line} space enter Q add , leave leave space add 1 leave command leave command leave command add close space add {$fp} command add puts space add {$secondColumnData} success done}}
 
+package require sqlite3
+
+sqlite3 ::dbcmd :memory:
+
+source ../../tcldocs/topdir/lib/td/dbinit.tcl
+source ../../tcldocs/topdir/lib/td/db.tcl
 
 test pda-2.3 {} -constraints {} -setup {
     set res {}
     set slave [PDASlave new {
+        proc GetRowIds {type args} {
+            if no {
+            emit [info level 0]
+            }
+            concat {*}[lmap name $args {
+                dbGetRowIDs2 $type $name
+            }]
+        }
+        proc parseExpressions strs {
+            if no {
+            emit [info level 0]
+            }
+            global data
+            set explex {}
+            foreach op [lsort -decreasing [dbcmd eval {select name from t0 where type in ('function', 'operator')}]] {
+                if {![string is alpha -strict $op]} {
+                    lappend explex [string map {| \\| ^ \\^ * \\* + \\+ ? \\?} $op] $op
+                } else {
+                    lappend explex \\y(?:$op)\\y $op
+                }
+            }
+            # Added to avoid false positives with alpha operators matching partial
+            # words.
+            lappend explex {\w+} w
+            # Added to make sure the tokenizer doesn't choke.
+            lappend explex . _
+            foreach str $strs {
+                foreach tok [tokenize $explex $str] {
+                    set label [lindex $tok 0]
+                    if {$label in {w _}} {
+                        continue
+                    } else {
+                        foreach type {operator function} {
+                            foreach id [GetRowIds $type $label] {
+                                dict incr data $id
+                            }
+                        }
+                    }
+                }
+            }
+        }
         proc action {what {str {}}} {
-            global word commands contexts cmdnum ctxnum cmddict ctxdict
+            global data word commands contexts cmdnum ctxnum cmddict ctxdict
             switch $what {
                 init {
                     set word {}
@@ -337,7 +384,22 @@ test pda-2.3 {} -constraints {} -setup {
                     dict for {k v} $::output {
                         dict set ::output $k [lsort -unique -dictionary $v]
                     }
+                    if no {
                     emit {*}$::output
+                    }
+                    try {
+                        parseExpressions [dict get $::output expressions]
+                        set ids [GetRowIds command {*}[dict get $::output commands]]
+                        foreach id $ids {
+                            dict incr data $id
+                        }
+                    } on error msg {
+                        emit $msg
+                    }
+                    if no {
+                    emit [lsort -integer [dict keys $data]]
+                    }
+                    emit [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
                 }
                 default {
                     ;
@@ -381,6 +443,9 @@ test pda-2.3 {} -constraints {} -setup {
         }
     }]
     $slave alias tokenize string::token text
+    $slave alias dbcmd dbcmd
+    $slave alias dbGetRowIDs2 dbGetRowIDs2
+    $slave alias dbGet dbGet
     PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
@@ -474,11 +539,23 @@ test pda-2.3 {} -constraints {} -setup {
     set tokens [::string::token text $lex $code]
     M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $script
     M dump
-    M output
+    lindex [M output] 0
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
-} -result {}
+} -result {[> (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than")
+[>= (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than or equal")
+[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[lappend](http://www.tcl.tk/man/tcl/TclCmd/lappend.htm "Append list elements onto a variable")
+[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
+[llength](http://www.tcl.tk/man/tcl/TclCmd/llength.htm "Count the number of elements in a list")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
+[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
 
 
 ::tcltest::cleanupTests
