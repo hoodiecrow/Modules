@@ -3,18 +3,18 @@
             if {![info exists explex]} {
                 set explex [dbMakeExpLex]
             }
+            set result {}
             foreach str $strs {
                 foreach tok [tokenize $explex $str] {
                     set label [lindex $tok 0]
                     if {$label ni {w _}} {
                         foreach type {operator function} {
-                            foreach id [dbGetRowIds $type $label] {
-                                dict incr data $id
-                            }
+                            lappend result {*}[dbGetRowIds $type $label]
                         }
                     }
                 }
             }
+            return $result
         }
         proc action {what {str {}}} {
             global data output word commands contexts cmdnum ctxnum cmddict ctxdict
@@ -108,25 +108,21 @@
                 }
                 escr {
                     dict for {k v} $output {
-                        dict set output $k [lsort -unique -dictionary $v]
-                    }
-                    if no {
-                    emit {*}$output
-                    }
-                    # TODO remove exception handler
-                    try {
-                        if {[dict exists $output expressions]} {
-                            parseExpressions [dict get $output expressions]
-                        }
-                        set ids [dbGetRowIds command {*}[dict get $output commands]]
+                        set v [lsort -unique -dictionary $v]
+                        set ids [switch $k {
+                            expressions {
+                                parseExpressions $v
+                            }
+                            commands {
+                                dbGetRowIds command {*}$v
+                            }
+                            default {
+                                ;
+                            }
+                        }]
                         foreach id $ids {
                             dict incr data $id
                         }
-                    } on error msg {
-                        emit $msg
-                    }
-                    if no {
-                    emit [lsort -integer [dict keys $data]]
                     }
                     emit [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
                 }
