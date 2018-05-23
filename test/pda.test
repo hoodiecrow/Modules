@@ -168,11 +168,10 @@ test pda-2.2 {} -constraints {} -setup {
         s q0
         Z S
         F {qe qf}
-    } [PDASlave new]
-    set script {
+    } [PDASlave new {
         emit init
         emit enter S
-    }
+    }]
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -252,7 +251,7 @@ test pda-2.2 {} -constraints {} -setup {
     }
     set code [lindex $snippets 0]
     set tokens [::string::token text $lex $code]
-    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $script
+    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
     lappend res [M output]
     set res
 } -cleanup {
@@ -260,6 +259,7 @@ test pda-2.2 {} -constraints {} -setup {
     log::lvSuppressLE i 1
 } -result {{init enter S add set space add fp space enter B add open space enter Q add {D:\\RWTH\\Mini} space add {thesis\\EclipseTCL\\TCL} space add {trial\\excelv1.csv} leave space add r leave command add set space add secondColumnData space add {{}} command add while space enter C enter B add gets space add {$fp} space add line leave add >=0 leave space enter C command add if space enter C enter B add llength space add {$line} leave add >0 leave space enter C command add lappend space add secondColumnData space enter B add lindex space enter B add split space add {$line} space enter Q add , leave leave space add 1 leave command leave command leave command add close space add {$fp} command add puts space add {$secondColumnData} success done}}
 
+if no {
 package require sqlite3
 
 sqlite3 ::dbcmd :memory:
@@ -556,191 +556,28 @@ test pda-2.3 {} -constraints {} -setup {
 [set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
 [split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
 [while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+}
 
+
+    package require sqlite3
+    catch {::dbcmd close}
+    sqlite3 ::dbcmd :memory:
+    set slave [PDASlave new {
+        action init
+    }]
+    $slave expose source
+    $slave alias tokenize string::token text
+    $slave alias dbcmd dbcmd
+    $slave eval {
+        namespace eval log {}
+        proc log::logMsg args {}
+        source ../../tcldocs/topdir/lib/td/dbinit.tcl
+        source ../../tcldocs/topdir/lib/td/db.tcl
+        source parse-tcldocs.tcl
+    }
 
 test pda-3.0 {} -constraints {} -setup {
     set res {}
-    set slave [PDASlave new {
-        proc parseExpressions strs {
-            global data explex
-            if {![info exists explex]} {
-                set explex [dbMakeExpLex]
-            }
-            foreach str $strs {
-                foreach tok [tokenize $explex $str] {
-                    set label [lindex $tok 0]
-                    if {$label ni {w _}} {
-                        foreach type {operator function} {
-                            foreach id [dbGetRowIds $type $label] {
-                                dict incr data $id
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        proc action {what {str {}}} {
-            global data word commands contexts cmdnum ctxnum cmddict ctxdict
-            switch $what {
-                init {
-                    set word {}
-                    set commands {}
-                    set cmdnum 0
-                    set cmddict {}
-                    set contexts {}
-                    set ctxnum 0
-                    set ctxdict {}
-                    action bctx S
-                }
-                enter {
-                    action bctx $str
-                    action bcmd
-                    action bwrd
-                }
-                leave {
-                    action ewrd
-                    action ecmd
-                    action ectx
-                }
-                command {
-                    action ewrd
-                    action ecmd
-                    action bcmd
-                    action bwrd
-                }
-                space {
-                    action ewrd
-                    action bwrd
-                }
-                add {
-                    action awrd $str
-                }
-                succ {
-                    action ewrd
-                    action ecmd
-                    action ectx
-                    action escr
-                }
-                bctx {
-                    incr ctxnum
-                    dict set ctxdict $ctxnum [list $str]
-                    set contexts [linsert $contexts 0 $ctxnum]
-                }
-                ectx {
-                    set contexts [lassign $contexts idx]
-                    set word <$idx>
-                }
-                bcmd {
-                    incr cmdnum
-                    set commands [linsert $commands 0 $cmdnum]
-                }
-                ecmd {
-                    set commands [lassign $commands idx]
-                    dict lappend ctxdict [lindex $contexts 0] ($idx)
-                }
-                bwrd {
-                    set word {}
-                }
-                awrd {
-                    append word $str
-                }
-                ewrd {
-                    if no {
-                    emit word $word
-                    }
-                    set cmdidx [lindex $commands 0]
-                    dict lappend cmddict $cmdidx $word
-                    set cmdwix [expr {[llength [dict get $cmddict $cmdidx]] - 1}]
-                    set cmdtype [lindex [dict get $cmddict $cmdidx] 0]
-                    if {$cmdwix eq 0} {
-                        dict lappend ::output commands $word
-                    }
-                    switch $cmdtype {
-                        if - while {
-                            if {$cmdwix eq 1} {
-                                if no {
-                                my Note [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
-                                }
-                                dict lappend ::output expressions [stringize $word]
-                            }
-                        }
-                        default {
-                        }
-                    }
-                    set ctxidx [lindex $contexts 0]
-                    set ctxtype [lindex [dict get $ctxdict $ctxidx] 0]
-                    if no {
-                    emit [format {command %2d/%d in %2d%s: "%s"} $cmdidx $cmdwix $ctxidx $ctxtype $word]
-                    }
-                }
-                escr {
-                    dict for {k v} $::output {
-                        dict set ::output $k [lsort -unique -dictionary $v]
-                    }
-                    if no {
-                    emit {*}$::output
-                    }
-                    try {
-                        parseExpressions [dict get $::output expressions]
-                        set ids [dbGetRowIds command {*}[dict get $::output commands]]
-                        foreach id $ids {
-                            dict incr data $id
-                        }
-                    } on error msg {
-                        emit $msg
-                    }
-                    if no {
-                    emit [lsort -integer [dict keys $data]]
-                    }
-                    emit [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
-                }
-                default {
-                    ;
-                }
-            }
-        }
-        proc stringize word {
-            global ctxdict cmddict
-            if no {
-                    cmdref { append res ($string) }
-            }
-            set lex {
-                {<\d+>}   ctxref
-                {\(\d+\)} cmdref
-                {[^<(]+}  other
-            }
-            set res {}
-            foreach token [tokenize $lex $word] {
-                lassign $token type begin end
-                set string [string range $word $begin $end]
-                switch $type {
-                    ctxref {
-                        set string [string trim $string <>]
-                        set ctx [dict get $ctxdict $string]
-                        if {[lindex $ctx 0] eq "B"} {
-                            append res C\($string)
-                        } else {
-                            append res C\([join [stringize [join [lrange $ctx 1 end]]]])
-                        }
-                    }
-                    cmdref {
-                        set cmd [dict get $cmddict [string trim $string ()]]
-                        append res [join [stringize [join $cmd]]]
-                    }
-                    default {
-                        append res $string
-                    }
-                }
-            }
-            return $res
-        }
-    }]
-    $slave alias tokenize string::token text
-    $slave alias dbcmd dbcmd
-    $slave alias dbGetRowIds dbGetRowIds
-    $slave alias dbGetRowIDs2 dbGetRowIDs2
-    $slave alias dbGet dbGet
-    $slave alias dbMakeExpLex dbMakeExpLex
     PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
@@ -749,9 +586,6 @@ test pda-3.0 {} -constraints {} -setup {
         Z S
         F {qe qf}
     } $slave
-    set script {
-        action init
-    }
     oo::objdefine M mixin -append Dump
     # qe    script empty
     # qf    script finished
@@ -831,7 +665,7 @@ test pda-3.0 {} -constraints {} -setup {
     }
     set code [lindex $snippets 0]
     set tokens [::string::token text $lex $code]
-    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $script
+    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
     M dump
     lindex [M output] 0
 } -cleanup {

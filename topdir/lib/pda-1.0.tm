@@ -24,21 +24,22 @@ oo::class create PDAStack {
 }
 
 oo::class create PDASlave {
-    variable slave output
+    variable slave script output
     constructor args {
         set slave [interp create -safe]
         $slave alias emit [self namespace]::my OutputCollect
         $slave alias vars [self namespace]::my SlaveVars
+        set script {}
         my reset
         lassign $args script
-        $slave eval $script
     }
     destructor {
         interp delete $slave
     }
-    method reset args {
+    method reset {} {
         log::log d [info level 0] 
         set output {}
+        $slave eval $script
     }
     method SlaveVars vals {
         $slave eval {unset -nocomplain {*}[info vars {[1-9]*}]}
@@ -141,7 +142,10 @@ oo::class create PDA {
 
     method read {tokens args} {
         my Reset
+        if no {
         catch { $slave eval {*}$args }
+        }
+        catch { $slave reset }
         dict with tuple {set state $s}
         foreach token [linsert $tokens end ε] {
             lassign $token a
