@@ -1,3 +1,6 @@
+        source ../../tcldocs/topdir/lib/td/dbinit.tcl
+        source ../../tcldocs/topdir/lib/td/db.tcl
+
         proc parseExpressions strs {
             global data explex
             if {![info exists explex]} {
@@ -94,10 +97,17 @@
                     switch $cmdtype {
                         if - while {
                             if {$cmdwix eq 1} {
-                                if no {
-                                my Note [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
-                                }
                                 dict lappend output expressions [stringize $word]
+                            }
+                        }
+                        for {
+                            if {$cmdwix eq 2} {
+                                dict lappend output expressions [stringize $word]
+                            }
+                        }
+                        package {
+                            if {$cmdwix eq 2 && [lindex [dict get $cmddict $cmdidx] 1] eq "require"} {
+                                dict lappend output packages $word
                             }
                         }
                         default {
@@ -112,6 +122,9 @@
                         set ids [switch $k {
                             expressions {
                                 parseExpressions $v
+                            }
+                            packages {
+                                dbGetRowIds package {*}$v
                             }
                             commands {
                                 dbGetRowIds command {*}$v
@@ -137,9 +150,10 @@
                     cmdref { append res ($string) }
             }
             set lex {
-                {<\d+>}   ctxref
-                {\(\d+\)} cmdref
-                {[^<(]+}  other
+                {<\d+>}      ctxref
+                {\(\d+\)}    cmdref
+                {[<(](?!\d)} other
+                {[^<(]+}     other
             }
             set res {}
             foreach token [tokenize $lex $word] {

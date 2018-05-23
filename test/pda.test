@@ -571,8 +571,6 @@ test pda-2.3 {} -constraints {} -setup {
     $slave eval {
         namespace eval log {}
         proc log::logMsg args {}
-        source ../../tcldocs/topdir/lib/td/dbinit.tcl
-        source ../../tcldocs/topdir/lib/td/db.tcl
         source parse-tcldocs.tcl
     }
     set lex {
@@ -664,8 +662,11 @@ test pda-3.0 {} -constraints {} -setup {
     set transitions [M get δ]
 } -body {
     set code [lindex $snippets 0]
-    set tokens [::string::token text $lex $code]
-    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
     lindex [M output] 0
 } -cleanup {
     M destroy
@@ -700,7 +701,11 @@ test pda-3.1 {} -constraints {} -setup {
 } -body {
     set code [lindex $snippets 1]
     set tokens [::string::token text $lex $code]
-    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
     M dump
     lindex [M output] 0
 } -cleanup {
@@ -712,6 +717,101 @@ test pda-3.1 {} -constraints {} -setup {
 [puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
 [read](http://www.tcl.tk/man/tcl/TclCmd/read.htm "Read from a channel")
 [regexp](http://www.tcl.tk/man/tcl/TclCmd/regexp.htm "Match a regular expression against a string")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.2 {} -constraints {} -setup {
+    set res {}
+    PDA create M {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {sp w nl lb rb dq lc rc em}
+        Γ {S B Q C}
+        s q0
+        Z S
+        F {qe qf}
+    } $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 2]
+    set tokens [::string::token text $lex $code]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
+[lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
+[scan](http://www.tcl.tk/man/tcl/TclCmd/scan.htm "Parse string using conversion specifiers in the style of sscanf")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")}
+
+
+test pda-3.3 {} -constraints {} -setup {
+    set res {}
+    PDA create M {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {sp w nl lb rb dq lc rc em}
+        Γ {S B Q C}
+        s q0
+        Z S
+        F {qe qf}
+    } $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 3]
+    set tokens [::string::token text $lex $code]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[csv (package)](http://core.tcl.tk/tcllib/doc/trunk/embedded/www/tcllib/files/modules/csv/csv.html "Procedures to handle CSV data.")
+[lassign](http://www.tcl.tk/man/tcl/TclCmd/lassign.htm "Assign list elements to variables")
+[lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
+[lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
+[package](http://www.tcl.tk/man/tcl/TclCmd/package.htm "Facilities for package loading and version control")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")}
+
+
+test pda-3.4 {} -constraints {} -setup {
+    set res {}
+    PDA create M {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {sp w nl lb rb dq lc rc em}
+        Γ {S B Q C}
+        s q0
+        Z S
+        F {qe qf}
+    } $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 4]
+    #error $code
+    set tokens [::string::token text $lex $code]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[< (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Less than")
+[for](http://www.tcl.tk/man/tcl/TclCmd/for.htm "'For' loop")
+[incr](http://www.tcl.tk/man/tcl/TclCmd/incr.htm "Increment the value of a variable")
+[llength](http://www.tcl.tk/man/tcl/TclCmd/llength.htm "Count the number of elements in a list")
+[lsearch](http://www.tcl.tk/man/tcl/TclCmd/lsearch.htm "See if a list contains a particular element")
 [set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
 
 
