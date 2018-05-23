@@ -575,6 +575,21 @@ test pda-2.3 {} -constraints {} -setup {
         source ../../tcldocs/topdir/lib/td/db.tcl
         source parse-tcldocs.tcl
     }
+    set lex {
+    {(\\.|[\w:$!%&'()*,-./?@+<=>^`|~])+}    w
+    {[ \t]+}                                sp
+    {\n}                                    nl
+    {\;}                                    sc
+    {\#}                                    ns
+    {\"\"|\{\}|\[\]}                        em
+    {\"}                                    dq
+    {\{\*\}}                                ex
+    {\{}                                    lc
+    {\}}                                    rc
+    {\[}                                    lb
+    {\]}                                    rb
+    .                                       Other
+    }
 
 test pda-3.0 {} -constraints {} -setup {
     set res {}
@@ -586,7 +601,6 @@ test pda-3.0 {} -constraints {} -setup {
         Z S
         F {qe qf}
     } $slave
-    oo::objdefine M mixin -append Dump
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -647,26 +661,11 @@ test pda-3.0 {} -constraints {} -setup {
 
     M addTransition {q[1-4]} rc C {q3 {}    {action leave}}
     
+    set transitions [M get δ]
 } -body {
-    set lex {
-    {(\\.|[\w:$!%&'()*,-./?@+<=>^`|~])+}    w
-    {[ \t]+}                                sp
-    {\n}                                    nl
-    {\;}                                    sc
-    {\#}                                    ns
-    {\"\"|\{\}|\[\]}                        em
-    {\"}                                    dq
-    {\{\*\}}                                ex
-    {\{}                                    lc
-    {\}}                                    rc
-    {\[}                                    lb
-    {\]}                                    rb
-    .                                       Other
-    }
     set code [lindex $snippets 0]
     set tokens [::string::token text $lex $code]
     M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
-    M dump
     lindex [M output] 0
 } -cleanup {
     M destroy
@@ -684,6 +683,36 @@ test pda-3.0 {} -constraints {} -setup {
 [set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
 [split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
 [while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+
+
+test pda-3.1 {} -constraints {} -setup {
+    set res {}
+    PDA create M {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {sp w nl lb rb dq lc rc em}
+        Γ {S B Q C}
+        s q0
+        Z S
+        F {qe qf}
+    } $slave
+    oo::objdefine M mixin -append Dump
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 1]
+    set tokens [::string::token text $lex $code]
+    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
+    M dump
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[lappend](http://www.tcl.tk/man/tcl/TclCmd/lappend.htm "Append list elements onto a variable")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[read](http://www.tcl.tk/man/tcl/TclCmd/read.htm "Read from a channel")
+[regexp](http://www.tcl.tk/man/tcl/TclCmd/regexp.htm "Match a regular expression against a string")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
 
 
 ::tcltest::cleanupTests

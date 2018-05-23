@@ -17,9 +17,11 @@
             }
         }
         proc action {what {str {}}} {
-            global data word commands contexts cmdnum ctxnum cmddict ctxdict
+            global data output word commands contexts cmdnum ctxnum cmddict ctxdict
             switch $what {
                 init {
+                    set data {}
+                    set output {}
                     set word {}
                     set commands {}
                     set cmdnum 0
@@ -87,7 +89,7 @@
                     set cmdwix [expr {[llength [dict get $cmddict $cmdidx]] - 1}]
                     set cmdtype [lindex [dict get $cmddict $cmdidx] 0]
                     if {$cmdwix eq 0} {
-                        dict lappend ::output commands $word
+                        dict lappend output commands $word
                     }
                     switch $cmdtype {
                         if - while {
@@ -95,7 +97,7 @@
                                 if no {
                                 my Note [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
                                 }
-                                dict lappend ::output expressions [stringize $word]
+                                dict lappend output expressions [stringize $word]
                             }
                         }
                         default {
@@ -105,15 +107,18 @@
                     set ctxtype [lindex [dict get $ctxdict $ctxidx] 0]
                 }
                 escr {
-                    dict for {k v} $::output {
-                        dict set ::output $k [lsort -unique -dictionary $v]
+                    dict for {k v} $output {
+                        dict set output $k [lsort -unique -dictionary $v]
                     }
                     if no {
-                    emit {*}$::output
+                    emit {*}$output
                     }
+                    # TODO remove exception handler
                     try {
-                        parseExpressions [dict get $::output expressions]
-                        set ids [dbGetRowIds command {*}[dict get $::output commands]]
+                        if {[dict exists $output expressions]} {
+                            parseExpressions [dict get $output expressions]
+                        }
+                        set ids [dbGetRowIds command {*}[dict get $output commands]]
                         foreach id $ids {
                             dict incr data $id
                         }

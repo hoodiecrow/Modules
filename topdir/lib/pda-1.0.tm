@@ -109,12 +109,16 @@ oo::class create PDA {
         }
     }
 
-    destructor {
-        catch { $slave destroy }
-    }
-
     method Reset args {
         catch { $slave reset }
+    }
+
+    method set {key val} {
+        dict set tuple $key $val
+    }
+
+    method get key {
+        dict get $tuple $key
     }
 
     method output {} {
