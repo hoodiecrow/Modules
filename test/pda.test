@@ -562,12 +562,20 @@ test pda-2.3 {} -constraints {} -setup {
     package require sqlite3
     catch {::dbcmd close}
     sqlite3 ::dbcmd :memory:
+    source ../../tcldocs/topdir/lib/td/dbinit.tcl
+    source ../../tcldocs/topdir/lib/td/db.tcl
     set slave [PDASlave new {
         action init
     }]
     $slave expose source
     $slave alias tokenize string::token text
+    if no {
     $slave alias dbcmd dbcmd
+    }
+    $slave alias dbGetRowIds dbGetRowIds
+    $slave alias dbGetRowIDs2 dbGetRowIDs2
+    $slave alias dbGet dbGet
+    $slave alias dbMakeExpLex dbMakeExpLex
     $slave eval {
         namespace eval log {}
         proc log::logMsg args {}
@@ -1018,6 +1026,30 @@ test pda-3.12 {} -constraints {} -setup {
 [lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
 [lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
 [proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.13 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+    oo::objdefine M mixin -append Dump
+} -body {
+    set code [lindex $snippets 13]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[ni (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "List non-membership")
+[continue](http://www.tcl.tk/man/tcl/TclCmd/continue.htm "Skip to the next iteration of a loop")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
+[lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
 [set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
 
 

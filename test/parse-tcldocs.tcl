@@ -1,5 +1,7 @@
-        source ../../tcldocs/topdir/lib/td/dbinit.tcl
-        source ../../tcldocs/topdir/lib/td/db.tcl
+if no {
+source ../../tcldocs/topdir/lib/td/dbinit.tcl
+source ../../tcldocs/topdir/lib/td/db.tcl
+}
 
         proc parseExpressions strs {
             global data explex
@@ -124,6 +126,7 @@
                     set ctxtype [lindex [dict get $ctxdict $ctxidx] 0]
                 }
                 escr {
+                    # TODO move outside slave so that items can be added or removed
                     dict for {k v} $output {
                         set v [lsort -unique -dictionary $v]
                         set ids [switch $k {
