@@ -57,6 +57,9 @@
                 add {
                     action awrd $str
                 }
+                topic {
+                    dict lappend output topics $str
+                }
                 succ {
                     action ewrd
                     action ecmd
@@ -65,7 +68,11 @@
                 }
                 bctx {
                     incr ctxnum
-                    dict set ctxdict $ctxnum [list $str]
+                    if {$str eq "B"} {
+                        dict set ctxdict $ctxnum [list [list B $word]]
+                    } else {
+                        dict set ctxdict $ctxnum [list $str]
+                    }
                     set contexts [linsert $contexts 0 $ctxnum]
                 }
                 ectx {
@@ -123,6 +130,9 @@
                             expressions {
                                 parseExpressions $v
                             }
+                            topics {
+                                dbGetRowIds topic {*}$v
+                            }
                             packages {
                                 dbGetRowIds package {*}$v
                             }
@@ -136,6 +146,11 @@
                         foreach id $ids {
                             dict incr data $id
                         }
+                    }
+                    if no {
+                        emit cmddict $cmddict
+                        emit ctxdict $ctxdict
+                    emit $output
                     }
                     emit [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
                 }
@@ -163,8 +178,12 @@
                     ctxref {
                         set string [string trim $string <>]
                         set ctx [dict get $ctxdict $string]
-                        if {[lindex $ctx 0] eq "B"} {
-                            append res C\($string)
+                        lassign [lindex $ctx 0] type prefix
+                        if no {
+                            emit "stringizing context $string: type is $type, prefix is $prefix"
+                        }
+                        if {$type eq "B"} {
+                            append res C$prefix\($string)
                         } else {
                             append res C\([join [stringize [join [lrange $ctx 1 end]]]])
                         }
@@ -177,6 +196,9 @@
                         append res $string
                     }
                 }
+            }
+            if no {
+                emit res $res
             }
             return $res
         }

@@ -573,6 +573,14 @@ test pda-2.3 {} -constraints {} -setup {
         proc log::logMsg args {}
         source parse-tcldocs.tcl
     }
+    set machineDefinition {
+        Q {qe qf q0 q1 q2 q3 q4}
+        Σ {w sp nl sc ns em dq ex lc rc lb rb}
+        Γ {S B Q C O}
+        s q0
+        Z S
+        F {qe qf}
+    }
     set lex {
     {(\\.|[\w:$!%&'()*,-./?@+<=>^`|~])+}    w
     {[ \t]+}                                sp
@@ -591,14 +599,7 @@ test pda-2.3 {} -constraints {} -setup {
 
 test pda-3.0 {} -constraints {} -setup {
     set res {}
-    PDA create M {
-        Q {qe qf q0 q1 q2 q3 q4}
-        Σ {sp w nl lb rb dq lc rc em}
-        Γ {S B Q C}
-        s q0
-        Z S
-        F {qe qf}
-    } $slave
+    PDA create M $machineDefinition $slave
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -607,57 +608,74 @@ test pda-3.0 {} -constraints {} -setup {
     # q2    in word, more text may follow
     # q3    in word, no more text
     # q4    interword space or after command
-    M addTransition q0       ε  S {qe {}    {action succ "no input"}}
-    M addTransition {q[1-4]} ε  S {qf {}    {action succ done}}
+    M addTransition q0       ε  S        {qe {}    {action succ "no input"}}
+    M addTransition {q[1-4]} ε  S        {qf {}    {action succ done}}
 
-    M addTransition q0       w  S {q2 -     {action add $2}}
-    M addTransition {q[12]}  w  * {q2 -     {action add $2}}
-    M addTransition q4       w  * {q2 -     {action space ; action add $2}}
+    M addTransition q0       w  S        {q2 -     {action add $2}}
+    M addTransition {q[12]}  w  *        {q2 -     {action add $2}}
+    M addTransition q4       w  *        {q2 -     {action space ; action add $2}}
 
-    M addTransition q4       em * {q3 -     {action space ; action add $2}}
+    M addTransition q4       em *        {q3 -     {action space ; action add $2}}
 
-    M addTransition q0       nl S {q1 {}}
-    M addTransition {q[1-4]} nl * {q1 -     {action command}}
+    M addTransition q0       nl S        {q1 {}}
+    M addTransition q1       *  O        {q1 -}
+    M addTransition q1       nl O        {q1 {}}
+    M addTransition {q[1-4]} nl {[SBQC]} {q1 -     {action command}}
 
-    M addTransition q1       sp * {q1 -}
-    M addTransition {q[01]}  sp S {q1 {}}
-    M addTransition {q[2-4]} sp * {q4 -}
+    M addTransition q1       sp *        {q1 -}
+    M addTransition {q[01]}  sp S        {q1 {}}
+    M addTransition {q[2-4]} sp *        {q4 -}
 
-    M addTransition {q[0-2]} lb S {q1 {B}   {action enter B}}
-    M addTransition {q[0-2]} dq S {q1 {Q}   {action enter Q}}
-    M addTransition {q[0-2]} lc S {q1 {C}   {action enter C}}
+    M addTransition q1       ns S        {q1 {O}}
+    M addTransition q1       ns B        {q1 {O B}}
+    M addTransition q1       ns Q        {q1 {O Q}}
+    M addTransition q1       ns C        {q1 {O C}}
+
+    M addTransition {q[014]} ex *        {q2 -     {action space ; action topic $2}}
+
+    M addTransition {q[01]}  lb S        {q1 {B}   {action enter B}}
+    M addTransition {q[01]}  dq S        {q1 {Q}   {action enter Q}}
+    M addTransition {q[01]}  lc S        {q1 {C}   {action enter C}}
     
-    M addTransition {q[4]}   lb S {q1 {B}   {action space ; action enter B}}
-    M addTransition {q[4]}   dq S {q1 {Q}   {action space ; action enter Q}}
-    M addTransition {q[4]}   lc S {q1 {C}   {action space ; action enter C}}
+    M addTransition q2       lb S        {q1 {B}   {action enter B}}
+    M addTransition q2       lb B        {q1 {B B} {action enter B}}
+    M addTransition q2       lb Q        {q1 {B Q} {action enter B}}
+    M addTransition q2       lb C        {q1 {B C} {action enter B}}
+    M addTransition q2       dq *        {q2 -     {action add $2}}
+    M addTransition q2       lc *        {q2 -     {action add $2}}
     
-    M addTransition {q[12]}  lb B {q1 {B B} {action enter B}}
-    M addTransition {q[12]}  dq B {q1 {Q B} {action enter Q}}
-    M addTransition {q[12]}  lc B {q1 {C B} {action enter C}}
-
-    M addTransition {q[4]}   lb B {q1 {B B} {action space ; action enter B}}
-    M addTransition {q[4]}   dq B {q1 {Q B} {action space ; action enter Q}}
-    M addTransition {q[4]}   lc B {q1 {C B} {action space ; action enter C}}
-
-    M addTransition {q[12]}  lb Q {q1 {B Q} {action enter B}}
-    M addTransition {q[12]}  lc Q {q1 {C Q} {action enter C}}
+    M addTransition q4       lb S        {q1 {B}   {action space ; action enter B}}
+    M addTransition q4       dq S        {q1 {Q}   {action space ; action enter Q}}
+    M addTransition q4       lc S        {q1 {C}   {action space ; action enter C}}
     
-    M addTransition {q[4]}   lb Q {q1 {B Q} {action space ; action enter B}}
-    M addTransition {q[4]}   lc Q {q1 {C Q} {action space ; action enter C}}
+    M addTransition q1       lb B        {q1 {B B} {action enter B}}
+    M addTransition q1       dq B        {q1 {Q B} {action enter Q}}
+    M addTransition q1       lc B        {q1 {C B} {action enter C}}
+
+    M addTransition q4       lb B        {q1 {B B} {action space ; action enter B}}
+    M addTransition q4       dq B        {q1 {Q B} {action space ; action enter Q}}
+    M addTransition q4       lc B        {q1 {C B} {action space ; action enter C}}
+
+    M addTransition q1       lb Q        {q1 {B Q} {action enter B}}
+    M addTransition q1       lc Q        {q1 {C Q} {action enter C}}
     
-    M addTransition {q[12]}  lb C {q1 {B C} {action enter B}}
-    M addTransition {q[12]}  dq C {q1 {Q C} {action enter Q}}
-    M addTransition {q[12]}  lc C {q1 {C C} {action enter C}}
-
-    M addTransition {q[4]}   lb C {q1 {B C} {action space ; action enter B}}
-    M addTransition {q[4]}   dq C {q1 {Q C} {action space ; action enter Q}}
-    M addTransition {q[4]}   lc C {q1 {C C} {action space ; action enter C}}
-
-    M addTransition {q[1-4]} rb B {q2 {}    {action leave}}
+    M addTransition q4       lb Q        {q1 {B Q} {action space ; action enter B}}
+    M addTransition q4       lc Q        {q1 {C Q} {action space ; action enter C}}
     
-    M addTransition {q[124]} dq Q {q3 {}    {action leave}}
+    M addTransition q1       lb C        {q1 {B C} {action enter B}}
+    M addTransition q1       dq C        {q1 {Q C} {action enter Q}}
+    M addTransition q1       lc C        {q1 {C C} {action enter C}}
 
-    M addTransition {q[1-4]} rc C {q3 {}    {action leave}}
+    M addTransition q4       lb C        {q1 {B C} {action space ; action enter B}}
+    M addTransition q4       dq C        {q1 {Q C} {action space ; action enter Q}}
+    M addTransition q4       lc C        {q1 {C C} {action space ; action enter C}}
+
+    M addTransition q2       rb {[SQC]}  {q2 -     {action add $2}}
+    M addTransition {q[1-4]} rb B        {q2 {}    {action leave}}
+    M addTransition q2       dq {[SBC]}  {q2 -     {action add $2}}
+    M addTransition {q[1-4]} dq Q        {q3 {}    {action leave}}
+    M addTransition q2       rc {[SBQ]}  {q2 -     {action add $2}}
+    M addTransition {q[1-4]} rc C        {q3 {}    {action leave}}
     
     set transitions [M get δ]
 } -body {
@@ -696,17 +714,14 @@ test pda-3.1 {} -constraints {} -setup {
         Z S
         F {qe qf}
     } $slave
-    oo::objdefine M mixin -append Dump
     M set δ $transitions
 } -body {
     set code [lindex $snippets 1]
-    set tokens [::string::token text $lex $code]
     set tokens [lmap token [::string::token text $lex $code] {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
     M read $tokens
-    M dump
     lindex [M output] 0
 } -cleanup {
     M destroy
@@ -733,7 +748,6 @@ test pda-3.2 {} -constraints {} -setup {
     M set δ $transitions
 } -body {
     set code [lindex $snippets 2]
-    set tokens [::string::token text $lex $code]
     set tokens [lmap token [::string::token text $lex $code] {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
@@ -763,7 +777,6 @@ test pda-3.3 {} -constraints {} -setup {
     M set δ $transitions
 } -body {
     set code [lindex $snippets 3]
-    set tokens [::string::token text $lex $code]
     set tokens [lmap token [::string::token text $lex $code] {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
@@ -785,19 +798,10 @@ test pda-3.3 {} -constraints {} -setup {
 
 test pda-3.4 {} -constraints {} -setup {
     set res {}
-    PDA create M {
-        Q {qe qf q0 q1 q2 q3 q4}
-        Σ {sp w nl lb rb dq lc rc em}
-        Γ {S B Q C}
-        s q0
-        Z S
-        F {qe qf}
-    } $slave
+    PDA create M $machineDefinition $slave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 4]
-    #error $code
-    set tokens [::string::token text $lex $code]
     set tokens [lmap token [::string::token text $lex $code] {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
@@ -812,6 +816,208 @@ test pda-3.4 {} -constraints {} -setup {
 [incr](http://www.tcl.tk/man/tcl/TclCmd/incr.htm "Increment the value of a variable")
 [llength](http://www.tcl.tk/man/tcl/TclCmd/llength.htm "Count the number of elements in a list")
 [lsearch](http://www.tcl.tk/man/tcl/TclCmd/lsearch.htm "See if a list contains a particular element")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.5 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 5]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[incr](http://www.tcl.tk/man/tcl/TclCmd/incr.htm "Increment the value of a variable")}
+
+
+test pda-3.6 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 6]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[> (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than")
+[array](http://www.tcl.tk/man/tcl/TclCmd/array.htm "Manipulate array variables")
+[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")}
+
+
+test pda-3.7 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 7]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
+[lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[return](http://www.tcl.tk/man/tcl/TclCmd/return.htm "Return from a procedure, or set return code of a script")
+[scan](http://www.tcl.tk/man/tcl/TclCmd/scan.htm "Parse string using conversion specifiers in the style of sscanf")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")}
+
+
+test pda-3.8 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 8]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[! (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Logical negation")
+[dict](http://www.tcl.tk/man/tcl/TclCmd/dict.htm "Manipulate dictionaries")
+[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[incr](http://www.tcl.tk/man/tcl/TclCmd/incr.htm "Increment the value of a variable")
+[lrepeat](http://www.tcl.tk/man/tcl/TclCmd/lrepeat.htm "Build a list by repeating elements")
+[lset](http://www.tcl.tk/man/tcl/TclCmd/lset.htm "Change an element in a list")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[return](http://www.tcl.tk/man/tcl/TclCmd/return.htm "Return from a procedure, or set return code of a script")
+[scan](http://www.tcl.tk/man/tcl/TclCmd/scan.htm "Parse string using conversion specifiers in the style of sscanf")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")}
+
+
+test pda-3.9 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 9]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[! (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Logical negation")
+[- (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Numeric negation/Subtraction")
+[== (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Equality")
+[> (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than")
+[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[eof](http://www.tcl.tk/man/tcl/TclCmd/eof.htm "Check for end of file condition on channel")
+[file](http://www.tcl.tk/man/tcl/TclCmd/file.htm "Manipulate file names and attributes")
+[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[list](http://www.tcl.tk/man/tcl/TclCmd/list.htm "Create a list")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")
+[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+
+
+test pda-3.10 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 10]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[lappend](http://www.tcl.tk/man/tcl/TclCmd/lappend.htm "Append list elements onto a variable")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[read](http://www.tcl.tk/man/tcl/TclCmd/read.htm "Read from a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")}
+
+
+test pda-3.11 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 11]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[read](http://www.tcl.tk/man/tcl/TclCmd/read.htm "Read from a channel")
+[regsub](http://www.tcl.tk/man/tcl/TclCmd/regsub.htm "Perform substitutions based on regular expression pattern matching")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.12 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition $slave
+    M set δ $transitions
+    oo::objdefine M mixin -append Dump
+} -body {
+    set code [lindex $snippets 12]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens
+    lindex [M output] 0
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[{*} (syntax)](http://www.tcl.tk/man/tcl/TclCmd/Tcl.htm "Expand arguments")
+[eq (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "String equality")
+[concat](http://www.tcl.tk/man/tcl/TclCmd/concat.htm "Join lists together")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[lassign](http://www.tcl.tk/man/tcl/TclCmd/lassign.htm "Assign list elements to variables")
+[lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
+[lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
 [set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
 
 
