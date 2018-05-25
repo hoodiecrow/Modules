@@ -108,18 +108,10 @@ oo::class create PDA {
             }
         }
         dict with tuple {}
+        my Foo
         my Ensure {$s in $Q} {illegal start state "%s"} $s
         my Ensure {$Z in ${Γ}} {illegal stack symbol "%s"} $Z
         my Ensure {subset($F, $Q)} {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]
-        if no {
-        my InitStack $Z ${Γ}
-        }
-    }
-
-    method Reset args {
-        if no {
-    catch { $slave eval reset }
-    }
     }
 
     method set {key val} {
@@ -149,22 +141,23 @@ oo::class create PDA {
     }
 
     method read {tokens {slave {}}} {
-        my Reset
+        log::log d [info level 0] 
+        my LogReset
         dict with tuple {set state $s}
         set stack [Stack new $Z]
         catch { $slave eval reset }
         foreach token [linsert $tokens end ε] {
-            lassign $token a
             catch { $slave eval [list vars $token] }
-            set trans ($state,$a,[$stack top])
-            if {![dict exists ${δ} $trans]} {
+            set trans ($state,[lindex $token 0],[$stack top])
+            if {[dict exists ${δ} $trans]} {
+                lassign [dict get ${δ} $trans] state γ action
+                $stack adjust {*}${γ}
+                catch { $slave eval $action }
+                my Note [list $trans -> $state [$stack get]]
+            } else {
                 my Log error [format {illegal transition %s} $trans]
                 return 0
             }
-            lassign [dict get ${δ} $trans] state γ action
-            $stack adjust {*}${γ}
-            catch { $slave eval $action }
-            my Note [list $trans -> $state [$stack get]]
         }
         $stack destroy
         return [expr {$state in $F}]

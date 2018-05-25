@@ -82,7 +82,7 @@ test pda-1.4 {} -setup {
 test pda-1.5 {} -setup {
     set res {}
 } -body {
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q666 Z S F {qe qf}]
+    PDA create M [dict create Q {q0 q1 qe qf} Γ {S} s q666 Z S]
 } -cleanup {
     log::lvSuppressLE i 1
 } -result {illegal start state "q666"} -returnCodes error

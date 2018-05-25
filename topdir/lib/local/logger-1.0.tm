@@ -1,6 +1,15 @@
 package require log
 
+# TODO doesn't really work well currently.  Mixing in NoLog into
+# the user class leaves Logger mixed in inside the instance.
+# Mixing in NoLog in the instance constructor interferes with
+# mixing in Log or Dump after construction.
+# It helps leaving out mixin Logger inside NoLog.
+
 oo::class create Logger {
+    method Foo args {
+        log::log d [self class]--[info level 0] 
+    }
     forward Warn my Log warning
     forward Note my Log notice
     forward Info my Log info
@@ -20,7 +29,6 @@ oo::class create Logger {
         }
     }
     method Ensure {cond msg args} {
-        log::log d [info level 0] 
         if {![uplevel 1 [list expr $cond]]} {
             my Error [format $msg {*}$args]
         }
@@ -30,7 +38,10 @@ oo::class create Logger {
 oo::class create Dump {
     mixin Logger
     variable dump
-    method Reset args {set dump {} ; next {*}$args}
+    method Foo args {
+        log::log d [self class]--[info level 0] 
+    }
+    method LogReset args {set dump {}}
     method dump {} {set dump}
     method Log {level text} {lappend dump $text}
 
@@ -38,12 +49,18 @@ oo::class create Dump {
 
 oo::class create Log {
     mixin Logger
-    method Reset args {log::lvChannel error stdout ; next {*}$args}
+    method Foo args {
+        log::log d [self class]--[info level 0] 
+    }
+    method LogReset args {log::lvChannel error stdout}
     forward Log ::log::log
 }
 
 oo::class create NoLog {
-    method Reset args {next {*}$args}
+    method Foo args {
+        log::log d [self class]--[info level 0] 
+    }
+    method LogReset args {}
     foreach m {Log Warn Info Note Error Assert} {
         forward $m list
     }
