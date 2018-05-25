@@ -1,60 +1,66 @@
 package require local::logger
+package require struct::stack
 
-oo::class create PDAStack {
-    variable stack start symbols
-    method InitStack args {
-        lassign $args start symbols
+oo::class create Stack {
+    variable stack
+    constructor args {
+        lassign $args start
+        set stack [::struct::stack]
+        oo::objdefine [self] forward push $stack push
+        oo::objdefine [self] forward top $stack peek 1
+        oo::objdefine [self] forward get $stack get
+        my clear $start
     }
-    method Reset args {set stack $start ; next {*}$args}
-    method AdjustStack args {
-        if {[llength $args] eq 1 && [lindex $args 0] eq "-"} {
-            return
+    destructor {
+        $stack destroy
+    }
+    method clear start {
+        $stack clear
+        my push $start
+    }
+    method pop {} {
+        if {[$stack size] > 1} {
+            $stack pop
         }
-        foreach arg $args {
-            my Ensure {$arg in $symbols} {illegal stack token "%s"} $arg
-        }
-        if {[my StackTop] eq $start} {
-            set stack [linsert $args end $start]
+    }
+    method adjust args {
+        set nargs [llength $args]
+        if {$nargs eq 0} {
+            my pop
+        } elseif {$nargs eq 1} {
+            lassign $args arg
+            if {$arg ne "-"} {
+                my pop
+                my push $arg
+            }
         } else {
-            set stack [lreplace $stack 0 0 {*}$args]
+            my pop
+            my push {*}[lreverse $args]
         }
     }
-    method StackTop {} {lindex $stack 0}
-    method GetStack {} {set stack}
 }
 
 oo::class create PDASlave {
-    variable slave script output
+    variable slave
     constructor args {
+        log::log d [info level 0] 
+        set script [lindex $args end]
+        set args [lrange $args 0 end-1]
         set slave [interp create -safe]
-        $slave alias emit [self namespace]::my OutputCollect
-        $slave alias vars [self namespace]::my SlaveVars
-        set script {}
-        my reset
-        lassign $args script
+        $slave expose source
+        foreach arg $args {
+            if {[llength $arg] eq 1} {
+                $slave eval [list uplevel #0 [list source -encoding utf-8 $arg]]
+            } else {
+                $slave eval $arg
+            }
+        }
+        $slave hide source
+        $slave eval [list proc __RESET {} [list uplevel #0 $script]]
+        oo::objdefine [self] forward eval $slave eval
     }
     destructor {
         interp delete $slave
-    }
-    method reset {} {
-        log::log d [info level 0] 
-        set output {}
-        $slave eval $script
-    }
-    method SlaveVars vals {
-        $slave eval {unset -nocomplain {*}[info vars {[1-9]*}]}
-        $slave eval [list set 0 $vals]
-        for {set i 1} {$i <= [llength $vals]} {incr i} {
-            $slave eval [list set $i [lindex $vals $i-1]]
-        }
-    }
-    method OutputCollect args {
-        log::log d [info level 0] 
-        lappend output {*}$args
-    }
-    method output {} {
-        log::log d [info level 0] 
-        set output
     }
     method unknown args {
         $slave {*}$args
@@ -90,27 +96,30 @@ proc ::tcl::mathfunc::diff {a b} {
 # F : the set of accept states
 # 
 oo::class create PDA {
-    mixin NoLog PDAStack
+    mixin NoLog
 
-    variable tuple slave
+    variable tuple
 
     constructor args {
-        lassign $args tuple slave
-        if {![dict exists $tuple δ]} {
-            dict set tuple δ {}
+        lassign $args tuple
+        foreach key {Q Σ Γ δ s Z F} {
+            if {![dict exists $tuple $key]} {
+                dict set tuple $key {}
+            }
         }
         dict with tuple {}
         my Ensure {$s in $Q} {illegal start state "%s"} $s
         my Ensure {$Z in ${Γ}} {illegal stack symbol "%s"} $Z
         my Ensure {subset($F, $Q)} {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]
-        my InitStack $Z ${Γ}
         if no {
-        oo::objdefine [self] forward output $slave output
+        my InitStack $Z ${Γ}
         }
     }
 
     method Reset args {
-        catch { $slave reset }
+        if no {
+    catch { $slave eval reset }
+    }
     }
 
     method set {key val} {
@@ -119,11 +128,6 @@ oo::class create PDA {
 
     method get key {
         dict get $tuple $key
-    }
-
-    method output {} {
-        log::log d [info level 0] 
-        $slave output
     }
 
     method addTransition {qp ap Xp t} {
@@ -144,26 +148,25 @@ oo::class create PDA {
         }
     }
 
-    method read {tokens args} {
+    method read {tokens {slave {}}} {
         my Reset
-        if no {
-        catch { $slave eval {*}$args }
-        }
-        catch { $slave reset }
         dict with tuple {set state $s}
+        set stack [Stack new $Z]
+        catch { $slave eval reset }
         foreach token [linsert $tokens end ε] {
             lassign $token a
             catch { $slave eval [list vars $token] }
-            set trans ($state,$a,[my StackTop])
+            set trans ($state,$a,[$stack top])
             if {![dict exists ${δ} $trans]} {
                 my Log error [format {illegal transition %s} $trans]
                 return 0
             }
             lassign [dict get ${δ} $trans] state γ action
-            my AdjustStack {*}${γ}
+            $stack adjust {*}${γ}
             catch { $slave eval $action }
-            my Note [list $trans -> $state [my GetStack]]
+            my Note [list $trans -> $state [$stack get]]
         }
+        $stack destroy
         return [expr {$state in $F}]
     }
 }

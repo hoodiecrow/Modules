@@ -90,19 +90,20 @@ test pda-1.5 {} -setup {
 
 test pda-1.6 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}] [PDASlave new]
+    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
     M addTransition q0      ε S {qe {}    {emit success "no input"}}
     M addTransition q0      0 S {q0 Z     {emit LVL [incr n]}}
     M addTransition q0      0 Z {q0 {Z Z} {emit LVL [incr n]}}
     M addTransition {q[01]} 1 Z {q1 {}    {emit LVL [incr n -1]}}
     M addTransition q1      ε S {qf {}    {emit success match}}
 } -body {
-    M read {}
-    lappend res [M output]
-    M read {0 1 1}
-    lappend res [M output]
-    M read {0 0 1 1}
-    lappend res [M output]
+    set slave [PDASlave new pdaslave.tcl {}]
+    M read {} $slave
+    lappend res [$slave eval emit]
+    M read {0 1 1} $slave
+    lappend res [$slave eval emit]
+    M read {0 0 1 1} $slave
+    lappend res [$slave eval emit]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -118,7 +119,7 @@ test pda-2.0 {} -setup {
         s q0
         Z S
         F {qe qf}
-    } [PDASlave new]
+    }
     M addTransition {q[0-4]} nl S {q0 {}    {}}
     M addTransition q0       ε  S {qe {}    {emit success "no input"}}
     M addTransition q0       sp S {q0 {}    {}}
@@ -128,12 +129,12 @@ test pda-2.0 {} -setup {
     M addTransition {q[34]}  sp S {q4 {}    {}}
     M addTransition {q[1-4]} ε  S {qf {}    {emit success match}}
 } -body {
-    M read {}
-    lappend res [M output]
-    M read {sp sp {w foo} sp}
-    lappend res [M output]
-    M read {sp {w foo} sp sp {w bar} sp}
-    lappend res [M output]
+    M read {} $slave
+    lappend res [$slave eval emit]
+    M read {sp sp {w foo} sp} $slave
+    lappend res [$slave eval emit]
+    M read {sp {w foo} sp sp {w bar} sp} $slave
+    lappend res [$slave eval emit]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -149,7 +150,7 @@ test pda-2.1 {} -setup {
         s q0
         Z S
         F {qe qf}
-    } [PDASlave new]
+    }
     oo::objdefine M mixin -append Dump
 } -body {
     M addTransition {q[0-4]} nl S {q0 {}    {}}
@@ -168,10 +169,7 @@ test pda-2.2 {} -constraints {} -setup {
         s q0
         Z S
         F {qe qf}
-    } [PDASlave new {
-        emit init
-        emit enter S
-    }]
+    }
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -249,314 +247,20 @@ test pda-2.2 {} -constraints {} -setup {
     {\]}                                    rb
     .                                       Other
     }
+    set slave [PDASlave new pdaslave.tcl {
+        emit init
+        emit enter S
+    }]
     set code [lindex $snippets 0]
     set tokens [::string::token text $lex $code]
-    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}]
-    lappend res [M output]
+    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $slave
+    lappend res [$slave eval emit]
     set res
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
 } -result {{init enter S add set space add fp space enter B add open space enter Q add {D:\\RWTH\\Mini} space add {thesis\\EclipseTCL\\TCL} space add {trial\\excelv1.csv} leave space add r leave command add set space add secondColumnData space add {{}} command add while space enter C enter B add gets space add {$fp} space add line leave add >=0 leave space enter C command add if space enter C enter B add llength space add {$line} leave add >0 leave space enter C command add lappend space add secondColumnData space enter B add lindex space enter B add split space add {$line} space enter Q add , leave leave space add 1 leave command leave command leave command add close space add {$fp} command add puts space add {$secondColumnData} success done}}
 
-if no {
-package require sqlite3
-
-sqlite3 ::dbcmd :memory:
-
-source ../../tcldocs/topdir/lib/td/dbinit.tcl
-source ../../tcldocs/topdir/lib/td/db.tcl
-
-test pda-2.3 {} -constraints {} -setup {
-    set res {}
-    set slave [PDASlave new {
-        proc GetRowIds {type args} {
-            if no {
-            emit [info level 0]
-            }
-            concat {*}[lmap name $args {
-                dbGetRowIDs2 $type $name
-            }]
-        }
-        proc parseExpressions strs {
-            if no {
-            emit [info level 0]
-            }
-            global data
-            set explex {}
-            foreach op [lsort -decreasing [dbcmd eval {select name from t0 where type in ('function', 'operator')}]] {
-                if {![string is alpha -strict $op]} {
-                    lappend explex [string map {| \\| ^ \\^ * \\* + \\+ ? \\?} $op] $op
-                } else {
-                    lappend explex \\y(?:$op)\\y $op
-                }
-            }
-            # Added to avoid false positives with alpha operators matching partial
-            # words.
-            lappend explex {\w+} w
-            # Added to make sure the tokenizer doesn't choke.
-            lappend explex . _
-            foreach str $strs {
-                foreach tok [tokenize $explex $str] {
-                    set label [lindex $tok 0]
-                    if {$label in {w _}} {
-                        continue
-                    } else {
-                        foreach type {operator function} {
-                            foreach id [GetRowIds $type $label] {
-                                dict incr data $id
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        proc action {what {str {}}} {
-            global data word commands contexts cmdnum ctxnum cmddict ctxdict
-            switch $what {
-                init {
-                    set word {}
-                    set commands {}
-                    set cmdnum 0
-                    set cmddict {}
-                    set contexts {}
-                    set ctxnum 0
-                    set ctxdict {}
-                }
-                bctx {
-                    incr ctxnum
-                    dict set ctxdict $ctxnum [list $str]
-                    set contexts [linsert $contexts 0 $ctxnum]
-                    action bcmd
-                }
-                ectx {
-                    action ecmd
-                    set contexts [lassign $contexts idx]
-                    set word <$idx>
-                }
-                bcmd {
-                    incr cmdnum
-                    set commands [linsert $commands 0 $cmdnum]
-                    action bwrd
-                }
-                ecmd {
-                    action ewrd
-                    set commands [lassign $commands idx]
-                    dict lappend ctxdict [lindex $contexts 0] ($idx)
-                }
-                bwrd {
-                    set word {}
-                }
-                awrd {
-                    append word $str
-                }
-                ewrd {
-                    if no {
-                    emit word $word
-                    }
-                    set cmdidx [lindex $commands 0]
-                    dict lappend cmddict $cmdidx $word
-                    set cmdwix [expr {[llength [dict get $cmddict $cmdidx]] - 1}]
-                    set cmdtype [lindex [dict get $cmddict $cmdidx] 0]
-                    if {$cmdwix eq 0} {
-                        dict lappend ::output commands $word
-                    }
-                    switch $cmdtype {
-                        if - while {
-                            if {$cmdwix eq 1} {
-                                if no {
-                                my Note [format {command %s: expression argument "%s"} $cmdtype [stringize $word]]
-                                }
-                                dict lappend ::output expressions [stringize $word]
-                            }
-                        }
-                        default {
-                        }
-                    }
-                    set ctxidx [lindex $contexts 0]
-                    set ctxtype [lindex [dict get $ctxdict $ctxidx] 0]
-                    if no {
-                    emit [format {command %2d/%d in %2d%s: "%s"} $cmdidx $cmdwix $ctxidx $ctxtype $word]
-                    }
-                }
-                succ {
-                    action ectx
-                    dict for {k v} $::output {
-                        dict set ::output $k [lsort -unique -dictionary $v]
-                    }
-                    if no {
-                    emit {*}$::output
-                    }
-                    try {
-                        parseExpressions [dict get $::output expressions]
-                        set ids [GetRowIds command {*}[dict get $::output commands]]
-                        foreach id $ids {
-                            dict incr data $id
-                        }
-                    } on error msg {
-                        emit $msg
-                    }
-                    if no {
-                    emit [lsort -integer [dict keys $data]]
-                    }
-                    emit [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
-                }
-                default {
-                    ;
-                }
-            }
-        }
-        proc stringize word {
-            global ctxdict cmddict
-            if no {
-                    cmdref { append res ($string) }
-            }
-            set lex {
-                {<\d+>}   ctxref
-                {\(\d+\)} cmdref
-                {[^<(]+}  other
-            }
-            set res {}
-            foreach token [tokenize $lex $word] {
-                lassign $token type begin end
-                set string [string range $word $begin $end]
-                switch $type {
-                    ctxref {
-                        set string [string trim $string <>]
-                        set ctx [dict get $ctxdict $string]
-                        if {[lindex $ctx 0] eq "B"} {
-                            append res C\($string)
-                        } else {
-                            append res C\([join [stringize [join [lrange $ctx 1 end]]]])
-                        }
-                    }
-                    cmdref {
-                        set cmd [dict get $cmddict [string trim $string ()]]
-                        append res [join [stringize [join $cmd]]]
-                    }
-                    default {
-                        append res $string
-                    }
-                }
-            }
-            return $res
-        }
-    }]
-    $slave alias tokenize string::token text
-    $slave alias dbcmd dbcmd
-    $slave alias dbGetRowIDs2 dbGetRowIDs2
-    $slave alias dbGet dbGet
-    PDA create M {
-        Q {qe qf q0 q1 q2 q3 q4}
-        Σ {sp w nl lb rb dq lc rc em}
-        Γ {S B Q C}
-        s q0
-        Z S
-        F {qe qf}
-    } $slave
-    set script {
-        action init
-        action bctx S
-    }
-    oo::objdefine M mixin -append Dump
-    # qe    script empty
-    # qf    script finished
-    # q0    start state, before script
-    #
-    # q1    before command
-    # q2    in word, more text may follow
-    # q3    in word, no more text
-    # q4    interword space or after command
-    M addTransition q0       ε  S {qe {}    {action succ "no input"}}
-    M addTransition {q[1-4]} ε  S {qf {}    {action succ done}}
-
-    M addTransition q0       w  S {q2 -     {action awrd $2}}
-    M addTransition {q[12]}  w  * {q2 -     {action awrd $2}}
-    M addTransition q4       w  * {q2 -     {action ewrd ; action bwrd ; action awrd $2}}
-
-    M addTransition q4       em * {q3 -     {action ewrd ; action bwrd ; action awrd $2}}
-
-    M addTransition q0       nl S {q1 {}}
-    M addTransition {q[1-4]} nl * {q1 -     {action ecmd ; action bcmd}}
-
-    M addTransition q1       sp * {q1 -}
-    M addTransition {q[01]}  sp S {q1 {}}
-    M addTransition {q[2-4]} sp * {q4 -}
-
-    M addTransition {q[0-2]} lb S {q1 {B}   {action bctx B}}
-    M addTransition {q[0-2]} dq S {q1 {Q}   {action bctx Q}}
-    M addTransition {q[0-2]} lc S {q1 {C}   {action bctx C}}
-    
-    M addTransition {q[4]}   lb S {q1 {B}   {action ewrd ; action bwrd ; action bctx B}}
-    M addTransition {q[4]}   dq S {q1 {Q}   {action ewrd ; action bwrd ; action bctx Q}}
-    M addTransition {q[4]}   lc S {q1 {C}   {action ewrd ; action bwrd ; action bctx C}}
-    
-    M addTransition {q[12]}  lb B {q1 {B B} {action bctx B}}
-    M addTransition {q[12]}  dq B {q1 {Q B} {action bctx Q}}
-    M addTransition {q[12]}  lc B {q1 {C B} {action bctx C}}
-
-    M addTransition {q[4]}   lb B {q1 {B B} {action ewrd ; action bwrd ; action bctx B}}
-    M addTransition {q[4]}   dq B {q1 {Q B} {action ewrd ; action bwrd ; action bctx Q}}
-    M addTransition {q[4]}   lc B {q1 {C B} {action ewrd ; action bwrd ; action bctx C}}
-
-    M addTransition {q[12]}  lb Q {q1 {B Q} {action bctx B}}
-    M addTransition {q[12]}  lc Q {q1 {C Q} {action bctx C}}
-    
-    M addTransition {q[4]}   lb Q {q1 {B Q} {action ewrd ; action bwrd ; action bctx B}}
-    M addTransition {q[4]}   lc Q {q1 {C Q} {action ewrd ; action bwrd ; action bctx C}}
-    
-    M addTransition {q[12]}  lb C {q1 {B C} {action bctx B}}
-    M addTransition {q[12]}  dq C {q1 {Q C} {action bctx Q}}
-    M addTransition {q[12]}  lc C {q1 {C C} {action bctx C}}
-
-    M addTransition {q[4]}   lb C {q1 {B C} {action ewrd ; action bwrd ; action bctx B}}
-    M addTransition {q[4]}   dq C {q1 {Q C} {action ewrd ; action bwrd ; action bctx Q}}
-    M addTransition {q[4]}   lc C {q1 {C C} {action ewrd ; action bwrd ; action bctx C}}
-
-    M addTransition {q[1-4]} rb B {q2 {}    {action ectx}}
-    
-    M addTransition {q[124]} dq Q {q3 {}    {action ectx}}
-
-    M addTransition {q[1-4]} rc C {q3 {}    {action ectx}}
-    
-} -body {
-    set lex {
-    {(\\.|[\w:$!%&'()*,-./?@+<=>^`|~])+}    w
-    {[ \t]+}                                sp
-    {\n}                                    nl
-    {\;}                                    sc
-    {\#}                                    ns
-    {\"\"|\{\}|\[\]}                        em
-    {\"}                                    dq
-    {\{\*\}}                                ex
-    {\{}                                    lc
-    {\}}                                    rc
-    {\[}                                    lb
-    {\]}                                    rb
-    .                                       Other
-    }
-    set code [lindex $snippets 0]
-    set tokens [::string::token text $lex $code]
-    M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $script
-    M dump
-    lindex [M output] 0
-} -cleanup {
-    M destroy
-    log::lvSuppressLE i 1
-} -result {[> (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than")
-[>= (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than or equal")
-[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
-[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
-[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
-[lappend](http://www.tcl.tk/man/tcl/TclCmd/lappend.htm "Append list elements onto a variable")
-[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
-[llength](http://www.tcl.tk/man/tcl/TclCmd/llength.htm "Count the number of elements in a list")
-[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
-[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
-[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
-[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")
-[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
-}
 
 
     package require sqlite3
@@ -564,23 +268,58 @@ test pda-2.3 {} -constraints {} -setup {
     sqlite3 ::dbcmd :memory:
     source ../../tcldocs/topdir/lib/td/dbinit.tcl
     source ../../tcldocs/topdir/lib/td/db.tcl
-    set slave [PDASlave new {
+    set slave [PDASlave new pdaslave.tcl {
         action init
     }]
     $slave expose source
     $slave alias tokenize string::token text
     if no {
     $slave alias dbcmd dbcmd
-    }
     $slave alias dbGetRowIds dbGetRowIds
     $slave alias dbGetRowIDs2 dbGetRowIDs2
     $slave alias dbGet dbGet
     $slave alias dbMakeExpLex dbMakeExpLex
+    }
     $slave eval {
         namespace eval log {}
         proc log::logMsg args {}
         source parse-tcldocs.tcl
     }
+        proc parseExpressions strs {
+            log::log d [info level 0] 
+            global explex
+            if {![info exists explex]} {
+                set explex [dbMakeExpLex]
+            }
+            set result {}
+            foreach str $strs {
+                foreach tok [::string::token text $explex $str] {
+                    set label [lindex $tok 0]
+                    if {$label ni {w _}} {
+                        foreach type {operator function} {
+                            lappend result {*}[dbGetRowIds $type $label]
+                        }
+                    }
+                }
+            }
+            return $result
+        }
+        proc getResult output {
+            # TODO move outside slave so that items can be added or removed
+            set data {}
+            dict for {k v} $output {
+                set v [lsort -unique -dictionary $v]
+                set ids [if {$k eq "expressions"} {
+                    parseExpressions $v
+                } else {
+                    dbGetRowIds $k {*}$v
+                }]
+                foreach id $ids {
+                    dict incr data $id
+                }
+            }
+            return [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
+        }
     set machineDefinition {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {w sp nl sc ns em dq ex lc rc lb rb}
@@ -607,7 +346,7 @@ test pda-2.3 {} -constraints {} -setup {
 
 test pda-3.0 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -692,8 +431,8 @@ test pda-3.0 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -721,7 +460,7 @@ test pda-3.1 {} -constraints {} -setup {
         s q0
         Z S
         F {qe qf}
-    } $slave
+    }
     M set δ $transitions
 } -body {
     set code [lindex $snippets 1]
@@ -729,8 +468,8 @@ test pda-3.1 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -752,7 +491,7 @@ test pda-3.2 {} -constraints {} -setup {
         s q0
         Z S
         F {qe qf}
-    } $slave
+    }
     M set δ $transitions
 } -body {
     set code [lindex $snippets 2]
@@ -760,8 +499,8 @@ test pda-3.2 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -781,7 +520,7 @@ test pda-3.3 {} -constraints {} -setup {
         s q0
         Z S
         F {qe qf}
-    } $slave
+    }
     M set δ $transitions
 } -body {
     set code [lindex $snippets 3]
@@ -789,8 +528,8 @@ test pda-3.3 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -806,7 +545,7 @@ test pda-3.3 {} -constraints {} -setup {
 
 test pda-3.4 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 4]
@@ -814,8 +553,8 @@ test pda-3.4 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -829,7 +568,7 @@ test pda-3.4 {} -constraints {} -setup {
 
 test pda-3.5 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 5]
@@ -837,8 +576,8 @@ test pda-3.5 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -848,7 +587,7 @@ test pda-3.5 {} -constraints {} -setup {
 
 test pda-3.6 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 6]
@@ -856,8 +595,8 @@ test pda-3.6 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -870,7 +609,7 @@ test pda-3.6 {} -constraints {} -setup {
 
 test pda-3.7 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 7]
@@ -878,8 +617,8 @@ test pda-3.7 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -894,7 +633,7 @@ test pda-3.7 {} -constraints {} -setup {
 
 test pda-3.8 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 8]
@@ -902,8 +641,8 @@ test pda-3.8 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -924,7 +663,7 @@ test pda-3.8 {} -constraints {} -setup {
 
 test pda-3.9 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 9]
@@ -932,8 +671,8 @@ test pda-3.9 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -957,7 +696,7 @@ test pda-3.9 {} -constraints {} -setup {
 
 test pda-3.10 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 10]
@@ -965,8 +704,8 @@ test pda-3.10 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -981,7 +720,7 @@ test pda-3.10 {} -constraints {} -setup {
 
 test pda-3.11 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
 } -body {
     set code [lindex $snippets 11]
@@ -989,8 +728,8 @@ test pda-3.11 {} -constraints {} -setup {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -1004,17 +743,16 @@ test pda-3.11 {} -constraints {} -setup {
 
 test pda-3.12 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
-    oo::objdefine M mixin -append Dump
 } -body {
     set code [lindex $snippets 12]
     set tokens [lmap token [::string::token text $lex $code] {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -1031,17 +769,18 @@ test pda-3.12 {} -constraints {} -setup {
 
 test pda-3.13 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition $slave
+    PDA create M $machineDefinition
     M set δ $transitions
-    oo::objdefine M mixin -append Dump
 } -body {
     set code [lindex $snippets 13]
     set tokens [lmap token [::string::token text $lex $code] {
         lassign $token sym beg end
         list $sym [string range $code $beg $end]
     }]
-    M read $tokens
-    lindex [M output] 0
+    M read $tokens $slave
+    set result [lindex [$slave eval emit] 0]
+    dict lappend result command continue
+    getResult $result
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
@@ -1051,6 +790,399 @@ test pda-3.13 {} -constraints {} -setup {
 [lmap (Tcl 8.5)](http://wiki.tcl.tk/40570 "Getting lmap for Tcl 8.5 and earlier")
 [lmap](http://www.tcl.tk/man/tcl/TclCmd/lmap.htm "Iterate over all elements in one or more lists and collect results")
 [set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.14 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 14]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[global](http://www.tcl.tk/man/tcl/TclCmd/global.htm "Access global variables")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")
+[tk_getOpenFile](http://www.tcl.tk/man/tcl/TkCmd/getOpenFile.htm "Pop up a dialog box for the user to select a file to open or save.")}
+
+
+test pda-3.15 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 15]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[! (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Logical negation")
+[+ (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Addition")
+[== (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Equality")
+[eof](http://www.tcl.tk/man/tcl/TclCmd/eof.htm "Check for end of file condition on channel")
+[expr](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Evaluate an expression")
+[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[regexp](http://www.tcl.tk/man/tcl/TclCmd/regexp.htm "Match a regular expression against a string")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+
+
+test pda-3.16 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 16]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[% (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Remainder")
+[dict](http://www.tcl.tk/man/tcl/TclCmd/dict.htm "Manipulate dictionaries")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[llength](http://www.tcl.tk/man/tcl/TclCmd/llength.htm "Count the number of elements in a list")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[return](http://www.tcl.tk/man/tcl/TclCmd/return.htm "Return from a procedure, or set return code of a script")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.17 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 17]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
+[list](http://www.tcl.tk/man/tcl/TclCmd/list.htm "Create a list")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[string](http://www.tcl.tk/man/tcl/TclCmd/string.htm "Manipulate strings")}
+
+
+test pda-3.18 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 18]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[eq (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "String equality")
+[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[join](http://www.tcl.tk/man/tcl/TclCmd/join.htm "Create a string by joining together list elements")
+[lappend](http://www.tcl.tk/man/tcl/TclCmd/lappend.htm "Append list elements onto a variable")
+[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")}
+
+
+test pda-3.19 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 19]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[{*} (syntax)](http://www.tcl.tk/man/tcl/TclCmd/Tcl.htm "Expand arguments")
+[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[info](http://www.tcl.tk/man/tcl/TclCmd/info.htm "Return information about the state of the Tcl interpreter")
+[lappend](http://www.tcl.tk/man/tcl/TclCmd/lappend.htm "Append list elements onto a variable")
+[namespace](http://www.tcl.tk/man/tcl/TclCmd/namespace.htm "Create and manipulate contexts for commands and variables")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[return](http://www.tcl.tk/man/tcl/TclCmd/return.htm "Return from a procedure, or set return code of a script")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.20 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 20]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    set result [lindex [$slave eval emit] 0]
+    dict lappend result command continue
+    getResult $result
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[!= (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Inequality")
+[% (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Remainder")
+[&& (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "logical AND operator")
+[+ (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Addition")
+[- (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Numeric negation/Subtraction")
+[<= (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Less than or equal")
+[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[continue](http://www.tcl.tk/man/tcl/TclCmd/continue.htm "Skip to the next iteration of a loop")
+[exec](http://www.tcl.tk/man/tcl/TclCmd/exec.htm "Invoke subprocesses")
+[expr](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Evaluate an expression")
+[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+
+
+test pda-3.21 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 21]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[&& (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "logical AND operator")
+[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[dict](http://www.tcl.tk/man/tcl/TclCmd/dict.htm "Manipulate dictionaries")
+[foreach](http://www.tcl.tk/man/tcl/TclCmd/foreach.htm "Iterate over all elements in one or more lists")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[proc](http://www.tcl.tk/man/tcl/TclCmd/proc.htm "Create a Tcl procedure")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[read](http://www.tcl.tk/man/tcl/TclCmd/read.htm "Read from a channel")
+[regexp](http://www.tcl.tk/man/tcl/TclCmd/regexp.htm "Match a regular expression against a string")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[split](http://www.tcl.tk/man/tcl/TclCmd/split.htm "Split a string into a proper Tcl list")}
+
+
+test pda-3.22 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+    oo::objdefine M mixin -append Dump
+} -body {
+    set code [lindex $snippets 22]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[== (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Equality")
+[>= (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than or equal")
+[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+
+
+test pda-3.23 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 23]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[== (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Equality")
+[>= (operator)](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Greater than or equal")
+[close](http://www.tcl.tk/man/tcl/TclCmd/close.htm "Close an open channel")
+[file](http://www.tcl.tk/man/tcl/TclCmd/file.htm "Manipulate file names and attributes")
+[gets](http://www.tcl.tk/man/tcl/TclCmd/gets.htm "Read a line from a channel")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[lindex](http://www.tcl.tk/man/tcl/TclCmd/lindex.htm "Retrieve an element from a list")
+[lset](http://www.tcl.tk/man/tcl/TclCmd/lset.htm "Change an element in a list")
+[open](http://www.tcl.tk/man/tcl/TclCmd/open.htm "Open a file-based or command pipeline channel")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[while](http://www.tcl.tk/man/tcl/TclCmd/while.htm "Execute script repeatedly as long as a condition is met")}
+
+
+test pda-3.24 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 24]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")}
+
+
+test pda-3.25 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code [lindex $snippets 25]
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[array](http://www.tcl.tk/man/tcl/TclCmd/array.htm "Manipulate array variables")
+[catch](http://www.tcl.tk/man/tcl/TclCmd/catch.htm "Evaluate script and trap exceptional returns")
+[if](http://www.tcl.tk/man/tcl/TclCmd/if.htm "Execute scripts conditionally")
+[parray](http://www.tcl.tk/man/tcl/TclCmd/library.htm "Prints on standard output the names and values of all the elements in a named array")
+[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[set](http://www.tcl.tk/man/tcl/TclCmd/set.htm "Read and write variables")
+[argv (variable)](http://www.tcl.tk/man/tcl/TclCmd/tclvars.htm "Tcl list of arguments to tclsh or wish")}
+
+
+test pda-4.0 {} -constraints {} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code {puts $::argv}
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup  {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[puts](http://www.tcl.tk/man/tcl/TclCmd/puts.htm "Write to a channel")
+[argv (variable)](http://www.tcl.tk/man/tcl/TclCmd/tclvars.htm "Tcl list of arguments to tclsh or wish")}
+
+
+test static-4.1 {} -constraints {TODO} -setup {
+    set res {}
+    PDA create M $machineDefinition
+    M set δ $transitions
+} -body {
+    set code {oo::class new foo ; foo new bar}
+    set tokens [lmap token [::string::token text $lex $code] {
+        lassign $token sym beg end
+        list $sym [string range $code $beg $end]
+    }]
+    M read $tokens $slave
+    getResult [lindex [$slave eval emit] 0]
+} -cleanup  {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {[oo::class](http://www.tcl.tk/man/tcl/TclCmd/class.htm "Class of all classes")
+[new (method of `class`)](http://www.tcl.tk/man/tcl/TclCmd/class.htm "Create unnamed instance")}
+
+
+# TODO test from markdown
+
+
+test textstr-1.0 {} -constraints {} -setup {
+    set res {}
+} -body {
+    #results check [::$ch parser::parse {idx_expr ; brace_expr}]
+    set result [dict create topic {idx_expr brace_expr}]
+    getResult $result
+} -cleanup  {
+    log::lvSuppressLE i 1
+} -result {
+
+*Syntax of Tcl index expressions:*
+
+  * *integer* zero-based index number
+  * `end` the last element
+  * `end`*-N* the *n*th element before the last element
+  * `end`*+N* the *n*th element after the last element (in practice, *N* should be negative)
+  * *M-N* the *n*th element before element *m*
+  * *M+N* the *n*th element after element *m*
+
+There can be no whitespace within the expression.
+
+
+*Brace your expressions*
+
+The [expr](http://www.tcl.tk/man/tcl/TclCmd/expr.htm "Evaluate an expression") command (and by extension, the commands `for`, `if`, and `while`, which use the same mechanism to evaluate their conditions) interprets an expression string that is constructed from its arguments. Note that the language of the expression string isn't Tcl, but specific to the `expr` command's expression evaluator: the languages share many syntactic forms, but are fundamentally different with infix, operator-based structure for the `expr` language and prefix, command-based structure for Tcl.
+
+Letting the Tcl interpreter evaluate the arguments before passing them to `expr` can lead to
+
+1. *double substitution*, which has security problems similar to SQL injection attacks.
+1. iterative commands (`for`, `while`) getting constant-valued condition arguments, leading to infinite loops.
+1. all substitutions (and thus their side-effects) always occurring while `expr` can selectively suppress some of them.
+
+Therefore, it is almost always better to provide the expression string as a braced (escaped) string, which will *not* be evaluated by the Tcl interpreter, only the `expr` interpreter.
+
+Note that while unbraced arguments to `expr` are allowed to be a invalid expression string as long as the argument evaluation transforms them into a valid one, braced expressions must be valid as they are (e.g. variable or command substitutions must be simple operands and not operators or complex expressions).
+
+Another benefit from using braced expression strings is that the byte compiler usually can generate more efficient code (5 - 10x faster) from them.}
 
 
 ::tcltest::cleanupTests

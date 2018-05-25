@@ -3,29 +3,10 @@ source ../../tcldocs/topdir/lib/td/dbinit.tcl
 source ../../tcldocs/topdir/lib/td/db.tcl
 }
 
-        proc parseExpressions strs {
-            global data explex
-            if {![info exists explex]} {
-                set explex [dbMakeExpLex]
-            }
-            set result {}
-            foreach str $strs {
-                foreach tok [tokenize $explex $str] {
-                    set label [lindex $tok 0]
-                    if {$label ni {w _}} {
-                        foreach type {operator function} {
-                            lappend result {*}[dbGetRowIds $type $label]
-                        }
-                    }
-                }
-            }
-            return $result
-        }
         proc action {what {str {}}} {
-            global data output word commands contexts cmdnum ctxnum cmddict ctxdict
+            global output word commands contexts cmdnum ctxnum cmddict ctxdict
             switch $what {
                 init {
-                    set data {}
                     set output {}
                     set word {}
                     set commands {}
@@ -60,7 +41,7 @@ source ../../tcldocs/topdir/lib/td/db.tcl
                     action awrd $str
                 }
                 topic {
-                    dict lappend output topics $str
+                    dict lappend output topic $str
                 }
                 succ {
                     action ewrd
@@ -79,7 +60,7 @@ source ../../tcldocs/topdir/lib/td/db.tcl
                 }
                 ectx {
                     set contexts [lassign $contexts idx]
-                    set word <$idx>
+                    set word [lindex [dict get $ctxdict $idx] 0 1]¤$idx¤
                 }
                 bcmd {
                     incr cmdnum
@@ -101,7 +82,11 @@ source ../../tcldocs/topdir/lib/td/db.tcl
                     set cmdwix [expr {[llength [dict get $cmddict $cmdidx]] - 1}]
                     set cmdtype [lindex [dict get $cmddict $cmdidx] 0]
                     if {$cmdwix eq 0} {
-                        dict lappend output commands $word
+                        dict lappend output command $word
+                    } else {
+                        set name $word
+                        regexp {(?:::)?((?:::+|\w)+)} $name -> name
+                        dict lappend output variable $name
                     }
                     switch $cmdtype {
                         if - while {
@@ -114,9 +99,14 @@ source ../../tcldocs/topdir/lib/td/db.tcl
                                 dict lappend output expressions [stringize $word]
                             }
                         }
+                        expr {
+                            if {$cmdwix > 0} {
+                                dict lappend output expressions [stringize $word]
+                            }
+                        }
                         package {
                             if {$cmdwix eq 2 && [lindex [dict get $cmddict $cmdidx] 1] eq "require"} {
-                                dict lappend output packages $word
+                                dict lappend output package $word
                             }
                         }
                         default {
@@ -126,82 +116,44 @@ source ../../tcldocs/topdir/lib/td/db.tcl
                     set ctxtype [lindex [dict get $ctxdict $ctxidx] 0]
                 }
                 escr {
-                    # TODO move outside slave so that items can be added or removed
-                    dict for {k v} $output {
-                        set v [lsort -unique -dictionary $v]
-                        set ids [switch $k {
-                            expressions {
-                                parseExpressions $v
-                            }
-                            topics {
-                                dbGetRowIds topic {*}$v
-                            }
-                            packages {
-                                dbGetRowIds package {*}$v
-                            }
-                            commands {
-                                dbGetRowIds command {*}$v
-                            }
-                            default {
-                                ;
-                            }
-                        }]
-                        foreach id $ids {
-                            dict incr data $id
-                        }
-                    }
-                    if no {
-                        emit cmddict $cmddict
-                        emit ctxdict $ctxdict
                     emit $output
-                    }
-                    emit [join [lmap rowid [lsort -integer [dict keys $data]] {dbGet $rowid}] \n]
                 }
                 default {
                     ;
                 }
             }
         }
-        proc stringize word {
+        proc stringizeCommand word {
             global ctxdict cmddict
-            if no {
-                    cmdref { append res ($string) }
+            if {[regexp {\((\d+)\)} $word -> idx]} {
+                set res [join [lrange [dict get $cmddict $idx] 0 end]]
+                return $res
+            } else {
+                return $word
             }
-            set lex {
-                {<\d+>}      ctxref
-                {\(\d+\)}    cmdref
-                {[<(](?!\d)} other
-                {[^<(]+}     other
-            }
-            set res {}
-            foreach token [tokenize $lex $word] {
-                lassign $token type begin end
-                set string [string range $word $begin $end]
-                switch $type {
-                    ctxref {
-                        set string [string trim $string <>]
-                        set ctx [dict get $ctxdict $string]
-                        lassign [lindex $ctx 0] type prefix
-                        if no {
-                            emit "stringizing context $string: type is $type, prefix is $prefix"
-                        }
-                        if {$type eq "B"} {
-                            append res C$prefix\($string)
-                        } else {
-                            append res C\([join [stringize [join [lrange $ctx 1 end]]]])
-                        }
-                    }
-                    cmdref {
-                        set cmd [dict get $cmddict [string trim $string ()]]
-                        append res [join [stringize [join $cmd]]]
-                    }
-                    default {
-                        append res $string
-                    }
+        }
+        proc stringizeWord word {
+            global ctxdict cmddict
+            if {[regexp {¤(\d+)¤} $word -> idx]} {
+                set ctx [dict get $ctxdict $idx]
+                lassign [lindex $ctx 0] type prefix
+                if {$type eq "B"} {
+                    return ${prefix}CMDSUB
+                } else {
+                    set res [join [lmap w [lrange $ctx 1 end] {stringizeCommand $w}]]
+                    return $res
                 }
+            } else {
+                return $word
             }
+        }
+        proc stringize word {
             if no {
-                emit res $res
+            emit [info level 0] 
+            set result [try {stringizeWord $word} on error msg {set msg}]
+            emit \$result=$result
+            return $result
+            } else {
+            stringizeWord $word
             }
-            return $res
         }
