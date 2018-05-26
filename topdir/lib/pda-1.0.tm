@@ -42,26 +42,33 @@ oo::class create Stack {
 }
 
 oo::class create PDASlave {
+    # Delegates everything except a reset method and a fields method to a safe
+    # interpreter. The last argument, if any are given, is a script that will
+    # be run when the reset method is called. Other arguments will be used as
+    # file names to be sourced in the global scope of the interpreter during
+    # instance creation.
     variable slave
     constructor args {
-        log::log d [info level 0] 
-        set script [lindex $args end]
-        set args [lrange $args 0 end-1]
         set slave [interp create -safe]
         $slave expose source
-        foreach arg $args {
-            if {[llength $arg] eq 1} {
-                $slave eval [list uplevel #0 [list source -encoding utf-8 $arg]]
-            } else {
-                $slave eval $arg
-            }
+        foreach arg [lrange $args 0 end-1] {
+            $slave eval [list uplevel #0 [list source -encoding utf-8 $arg]]
         }
         $slave hide source
-        $slave eval [list proc __RESET {} [list uplevel #0 $script]]
-        oo::objdefine [self] forward eval $slave eval
+        oo::objdefine [self] method reset {} [list $slave eval [lindex $args end]]
     }
     destructor {
         interp delete $slave
+    }
+    method fields record {
+        # Creates AWK-style field variables from an input list, with $0 being
+        # the value of the whole list, and $1 etc being the values of the
+        # items.
+        $slave eval {unset -nocomplain {*}[info vars {[1-9]*}]}
+        $slave eval [list set 0 $record]
+        for {set i 1} {$i <= [llength $record]} {incr i} {
+            $slave eval [list set $i [lindex $record $i-1]]
+        }
     }
     method unknown args {
         $slave {*}$args
@@ -109,10 +116,15 @@ oo::class create PDA {
             }
         }
         dict with tuple {}
-        my Foo
-        my Ensure {$s in $Q} {illegal start state "%s"} $s
-        my Ensure {$Z in ${Γ}} {illegal stack symbol "%s"} $Z
-        my Ensure {subset($F, $Q)} {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]
+        if {$s ni $Q} {
+            return -code error [format {illegal start state "%s"} $s]
+        }
+        if {$Z ni ${Γ}} {
+            return -code error [format {illegal stack symbol "%s"} $Z]
+        }
+        if {!subset($F, $Q)} {
+            return -code error [format {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]]
+        }
     }
 
     method set {key val} {
@@ -143,19 +155,22 @@ oo::class create PDA {
 
     method read {tokens {slave {}}} {
         log::log d [info level 0] 
+        # TODO move into slave
         my LogReset
         dict with tuple {set state $s}
         set stack [Stack new $Z]
-        catch { $slave eval reset }
+        catch { $slave reset }
         foreach token [linsert $tokens end ε] {
-            catch { $slave eval [list vars $token] }
+            catch { $slave fields $token }
             set trans ($state,[lindex $token 0],[$stack peek])
             if {[dict exists ${δ} $trans]} {
                 lassign [dict get ${δ} $trans] state γ action
                 $stack adjust {*}${γ}
                 catch { $slave eval $action }
+                # TODO move into slave
                 my Note [list $trans -> $state [$stack get]]
             } else {
+                # TODO move into slave
                 my Log error [format {illegal transition %s} $trans]
                 return 0
             }

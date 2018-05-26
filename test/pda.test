@@ -97,7 +97,7 @@ test pda-1.6 {} -setup {
     M addTransition {q[01]} 1 Z {q1 {}    {emit LVL [incr n -1]}}
     M addTransition q1      ε S {qf {}    {emit success match}}
 } -body {
-    set slave [PDASlave new pdaslave.tcl {}]
+    set slave [PDASlave new pdaslave.tcl {emit -clear}]
     M read {} $slave
     lappend res [$slave eval emit]
     M read {0 1 1} $slave

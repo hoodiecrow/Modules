@@ -1,12 +1,8 @@
-if no {
-source ../../tcldocs/topdir/lib/td/dbinit.tcl
-source ../../tcldocs/topdir/lib/td/db.tcl
-}
-
         proc action {what {str {}}} {
             global output word commands contexts cmdnum ctxnum cmddict ctxdict
             switch $what {
                 init {
+                    emit -clear
                     set output {}
                     set word {}
                     set commands {}
