@@ -2,21 +2,17 @@ package require local::logger
 package require struct::stack
 
 oo::class create Stack {
+    # A stack that delegates to struct::stack except that it protects its
+    # bottom element from popping and that it offers an 'adjust' method for
+    # mutation.
     variable stack
     constructor args {
         lassign $args start
         set stack [::struct::stack]
-        oo::objdefine [self] forward push $stack push
-        oo::objdefine [self] forward top $stack peek 1
-        oo::objdefine [self] forward get $stack get
-        my clear $start
+        my push $start
     }
     destructor {
         $stack destroy
-    }
-    method clear start {
-        $stack clear
-        my push $start
     }
     method pop {} {
         if {[$stack size] > 1} {
@@ -24,6 +20,8 @@ oo::class create Stack {
         }
     }
     method adjust args {
+        # If called with a single '-' as argument, leave stack unchanged. Else,
+        # pop the stack and then push each argument.
         set nargs [llength $args]
         if {$nargs eq 0} {
             my pop
@@ -37,6 +35,9 @@ oo::class create Stack {
             my pop
             my push {*}[lreverse $args]
         }
+    }
+    method unknown args {
+        $stack {*}$args
     }
 }
 
@@ -148,7 +149,7 @@ oo::class create PDA {
         catch { $slave eval reset }
         foreach token [linsert $tokens end ε] {
             catch { $slave eval [list vars $token] }
-            set trans ($state,[lindex $token 0],[$stack top])
+            set trans ($state,[lindex $token 0],[$stack peek])
             if {[dict exists ${δ} $trans]} {
                 lassign [dict get ${δ} $trans] state γ action
                 $stack adjust {*}${γ}
