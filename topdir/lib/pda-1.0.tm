@@ -104,9 +104,7 @@ proc ::tcl::mathfunc::diff {a b} {
 # F : the set of accept states
 # 
 oo::class create PDA {
-    mixin NoLog
-
-    variable tuple
+    variable tuple path
 
     constructor args {
         lassign $args tuple
@@ -135,15 +133,25 @@ oo::class create PDA {
         dict get $tuple $key
     }
 
+    method path {} {
+        return $path
+    }
+
     method addTransition {qp ap Xp t} {
         dict with tuple {
             set keys0 [lsearch -glob -all -inline $Q $qp]
             set keys1 [lsearch -glob -all -inline [linsert ${Σ} end ε] $ap]
             set keys2 [lsearch -glob -all -inline ${Γ} $Xp]
         }
-        my Assert {[llength $keys0] > 0} {no matching keys for "%s"} $qp
-        my Assert {[llength $keys1] > 0} {no matching keys for "%s"} $ap
-        my Assert {[llength $keys2] > 0} {no matching keys for "%s"} $Xp
+        if {[llength $keys0] < 1} {
+            return -code error [format {no matching keys for "%s"} $qp]
+        }
+        if {[llength $keys1] < 1} {
+            return -code error [format {no matching keys for "%s"} $ap]
+        }
+        if {[llength $keys2] < 1} {
+            return -code error [format {no matching keys for "%s"} $Xp]
+        }
         foreach k0 $keys0 {
             foreach k1 $keys1 {
                 foreach k2 $keys2 {
@@ -156,7 +164,7 @@ oo::class create PDA {
     method read {tokens {slave {}}} {
         log::log d [info level 0] 
         # TODO move into slave
-        my LogReset
+        set path {}
         dict with tuple {set state $s}
         set stack [Stack new $Z]
         catch { $slave reset }
@@ -168,10 +176,10 @@ oo::class create PDA {
                 $stack adjust {*}${γ}
                 catch { $slave eval $action }
                 # TODO move into slave
-                my Note [list $trans -> $state [$stack get]]
+                lappend path [list $trans -> $state [$stack get]]
             } else {
                 # TODO move into slave
-                my Log error [format {illegal transition %s} $trans]
+                lappend path [list $trans ??]
                 return 0
             }
         }
