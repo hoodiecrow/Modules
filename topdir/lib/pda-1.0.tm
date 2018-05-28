@@ -156,22 +156,22 @@ oo::class create PDA {
         }
     }
 
-    method Init slave {
+    method Init {} {
         dict with tuple {
             set state $s
             set stack [Stack new $Z]
         }
-        catch { $slave reset }
     }
 
-    method Each {token slave} {
+    method Exec action {}
+
+    method Each token {
         dict with tuple {}
-        catch { $slave fields $token }
         set current ($state,[lindex $token 0],[$stack peek])
         if {[dict exists ${δ} $current]} {
             lassign [dict get ${δ} $current] state γ action
             $stack adjust {*}${γ}
-            catch { $slave eval $action }
+            my Exec $action
             return [list $current -> $state [$stack get]]
         } else {
             return -code error [list $current -> FAIL]
@@ -182,12 +182,54 @@ oo::class create PDA {
         $stack destroy
     }
 
-    method read {tokens {slave {}}} {
+    method read tokens {
+        my Init
+        set result {}
+        try {
+            foreach token [linsert $tokens end ε] {
+                lappend result [my Each $token]
+            }
+        } on ok {} {
+            concat [expr {$state in [my get F]}] [lappend result {}]
+        } on error err {
+            concat 0 [lappend result $err]
+        } finally {
+            my Done
+        }
+    }
+
+}
+
+oo::class create PDAWithSlave {
+    variable tuple state slave
+
+    method Init args {
+        next {*}[lrange $args 0 end-1]
+        set slave [lindex $args end]
+        $slave reset
+    }
+
+    method Exec action {
+        $slave eval $action
+    }
+
+    method Each token {
+        $slave fields $token
+        try {
+            next $token
+        } on ok res {
+            return $res
+        } on error err {
+            return -code error $err
+        }
+    }
+
+    method read {tokens slave} {
         my Init $slave
         set result {}
         try {
             foreach token [linsert $tokens end ε] {
-                lappend result [my Each $token $slave]
+                lappend result [my Each $token]
             }
         } on ok {} {
             concat [expr {$state in [my get F]}] [lappend result {}]
