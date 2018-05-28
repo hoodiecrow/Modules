@@ -42,20 +42,17 @@ oo::class create Stack {
 }
 
 oo::class create PDASlave {
-    # Delegates everything except a reset method and a fields method to a safe
-    # interpreter. The last argument, if any are given, is a script that will
-    # be run when the reset method is called. Other arguments will be used as
-    # file names to be sourced in the global scope of the interpreter during
-    # instance creation.
+    # Defines the methods reset, source, and fields; delegates everything else
+    # to a safe interpreter. If given an argument, the reset method will
+    # evaluate it in the interpreter as a script. The source method invokes
+    # source on its arguments in the interpreter. The fields method is
+    # documented below.
     variable slave
     constructor args {
         set slave [interp create -safe]
-        $slave expose source
-        foreach arg [lrange $args 0 end-1] {
-            $slave eval [list uplevel #0 [list source -encoding utf-8 $arg]]
-        }
-        $slave hide source
-        oo::objdefine [self] method reset {} [list $slave eval [lindex $args end]]
+        log::log d [lindex $args 0]
+        oo::objdefine [self] method reset {} [list $slave eval [lindex $args 0]]
+        oo::objdefine [self] forward source $slave invokehidden source
     }
     destructor {
         interp delete $slave
@@ -104,7 +101,7 @@ proc ::tcl::mathfunc::diff {a b} {
 # F : the set of accept states
 # 
 oo::class create PDA {
-    variable tuple path
+    variable tuple state stack
 
     constructor args {
         lassign $args tuple
@@ -114,14 +111,14 @@ oo::class create PDA {
             }
         }
         dict with tuple {}
-        if {$s ni $Q} {
-            return -code error [format {illegal start state "%s"} $s]
-        }
-        if {$Z ni ${Γ}} {
-            return -code error [format {illegal stack symbol "%s"} $Z]
-        }
-        if {!subset($F, $Q)} {
-            return -code error [format {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]]
+        my Check {$s ni $Q} {illegal start state "%s"} $s
+        my Check {$Z ni ${Γ}} {illegal stack symbol "%s"} $Z
+        my Check {!subset($F, $Q)} {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]
+    }
+
+    method Check {cond args} {
+        if [uplevel 1 [list expr $cond]] {
+            return -code error -level 2 [format {*}$args]
         }
     }
 
@@ -137,53 +134,68 @@ oo::class create PDA {
         return $path
     }
 
-    method addTransition {qp ap Xp t} {
+    method addTransition {qp ap Xp value} {
+        # Add new items to the transition dictionary. The first three arguments
+        # are glob-style patterns for state labels, input symbols, and stack
+        # symbols. The last argument is the transition value. It is an error if
+        # any of the patters don't match any items in the respective alphabets.
         dict with tuple {
             set keys0 [lsearch -glob -all -inline $Q $qp]
             set keys1 [lsearch -glob -all -inline [linsert ${Σ} end ε] $ap]
             set keys2 [lsearch -glob -all -inline ${Γ} $Xp]
         }
-        if {[llength $keys0] < 1} {
-            return -code error [format {no matching keys for "%s"} $qp]
-        }
-        if {[llength $keys1] < 1} {
-            return -code error [format {no matching keys for "%s"} $ap]
-        }
-        if {[llength $keys2] < 1} {
-            return -code error [format {no matching keys for "%s"} $Xp]
-        }
+        my Check {[llength $keys0] < 1} {no matching keys for "%s"} $qp
+        my Check {[llength $keys1] < 1} {no matching keys for "%s"} $ap
+        my Check {[llength $keys2] < 1} {no matching keys for "%s"} $Xp
         foreach k0 $keys0 {
             foreach k1 $keys1 {
                 foreach k2 $keys2 {
-                    dict set tuple δ ($k0,$k1,$k2) $t
+                    dict set tuple δ ($k0,$k1,$k2) $value
                 }
             }
         }
     }
 
-    method read {tokens {slave {}}} {
-        log::log d [info level 0] 
-        # TODO move into slave
-        set path {}
-        dict with tuple {set state $s}
-        set stack [Stack new $Z]
-        catch { $slave reset }
-        foreach token [linsert $tokens end ε] {
-            catch { $slave fields $token }
-            set trans ($state,[lindex $token 0],[$stack peek])
-            if {[dict exists ${δ} $trans]} {
-                lassign [dict get ${δ} $trans] state γ action
-                $stack adjust {*}${γ}
-                catch { $slave eval $action }
-                # TODO move into slave
-                lappend path [list $trans -> $state [$stack get]]
-            } else {
-                # TODO move into slave
-                lappend path [list $trans ??]
-                return 0
-            }
+    method Init slave {
+        dict with tuple {
+            set state $s
+            set stack [Stack new $Z]
         }
-        $stack destroy
-        return [expr {$state in $F}]
+        catch { $slave reset }
     }
+
+    method Each {token slave} {
+        dict with tuple {}
+        catch { $slave fields $token }
+        set current ($state,[lindex $token 0],[$stack peek])
+        if {[dict exists ${δ} $current]} {
+            lassign [dict get ${δ} $current] state γ action
+            $stack adjust {*}${γ}
+            catch { $slave eval $action }
+            return [list $current -> $state [$stack get]]
+        } else {
+            return -code error [list $current -> FAIL]
+        }
+    }
+
+    method Done {} {
+        $stack destroy
+    }
+
+    method read {tokens {slave {}}} {
+        my Init $slave
+        set result {}
+        try {
+            foreach token [linsert $tokens end ε] {
+                lappend result [my Each $token $slave]
+            }
+        } on ok {} {
+            concat [expr {$state in [my get F]}] [lappend result {}]
+        } on error err {
+            concat 0 [lappend result $err]
+        } finally {
+            my Done
+        }
+    }
+
 }

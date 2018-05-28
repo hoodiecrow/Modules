@@ -11,8 +11,3 @@ proc emit args {
         }
     }
 }
-
-proc reset {} {
-    set ::collectedOutput {}
-    __RESET
-}
