@@ -22,7 +22,7 @@ dict set δ (q1,ε,S) {qf {}}
 
 test pda-1.0 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     lindex [M read {}] 0
 } -cleanup {
@@ -33,7 +33,7 @@ test pda-1.0 {} -setup {
 
 test pda-1.1 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     lindex [M read {0 0 0 0 1 1 1 1}] 0
 } -cleanup {
@@ -44,7 +44,7 @@ test pda-1.1 {} -setup {
 
 test pda-1.2 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     lindex [M read {0 0 0 0 1 1 1 1 1}] 0
 } -cleanup {
@@ -55,7 +55,7 @@ test pda-1.2 {} -setup {
 
 test pda-1.3 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     M read {0 1 1}
 } -cleanup {
@@ -66,7 +66,7 @@ test pda-1.3 {} -setup {
 
 test pda-1.4 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     M read {0 1 1}
 } -cleanup {
@@ -78,7 +78,7 @@ test pda-1.4 {} -setup {
 test pda-1.5 {} -setup {
     set res {}
 } -body {
-    PDA create M [dict create Q {q0 q1 qe qf} Γ {S} s q666 Z S]
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Γ {S} s q666 Z S]
 } -cleanup {
     log::lvSuppressLE i 1
 } -result {illegal start state "q666"} -returnCodes error
@@ -86,15 +86,15 @@ test pda-1.5 {} -setup {
 
 test pda-1.6 {} -setup {
     set res {}
-    PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M addTransition q0      ε S {qe {}    {emit success "no input"}}
     M addTransition q0      0 S {q0 Z     {emit LVL [incr n]}}
     M addTransition q0      0 Z {q0 {Z Z} {emit LVL [incr n]}}
     M addTransition {q[01]} 1 Z {q1 {}    {emit LVL [incr n -1]}}
     M addTransition q1      ε S {qf {}    {emit success match}}
 } -body {
-    set slave [PDASlave new {emit -clear}]
+    set slave [::PDA::Slave new {emit -clear}]
     $slave source pdaslave.tcl
     M read {} $slave
     lappend res [$slave eval emit]
@@ -110,7 +110,7 @@ test pda-1.6 {} -setup {
 
 test pda-2.0 {} -setup {
     set res {}
-    PDA create M {
+    ::PDA::PDA create M {
         Q {q0 q1 q2 q3 q4 qe qf}
         Σ {sp w nl}
         Γ {S}
@@ -118,7 +118,7 @@ test pda-2.0 {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin PDAWithSlave
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M addTransition {q[0-4]} nl S {q0 {}    {}}
     M addTransition q0       ε  S {qe {}    {emit success "no input"}}
     M addTransition q0       sp S {q0 {}    {}}
@@ -142,7 +142,7 @@ test pda-2.0 {} -setup {
 
 test pda-2.1 {} -setup {
     set res {}
-    PDA create M {
+    ::PDA::PDA create M {
         Q {q0 q1 q2 q3 q4 qe qf}
         Σ {sp w n}
         Γ {S}
@@ -160,7 +160,7 @@ test pda-2.1 {} -setup {
 
 test pda-2.2 {} -constraints {} -setup {
     set res {}
-    PDA create M {
+    ::PDA::PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
         Γ {S B Q C}
@@ -168,7 +168,7 @@ test pda-2.2 {} -constraints {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin PDAWithSlave
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -246,7 +246,7 @@ test pda-2.2 {} -constraints {} -setup {
     {\]}                                    rb
     .                                       Other
     }
-    set slave [PDASlave new {
+    set slave [::PDA::Slave new {
         emit init
         emit enter S
     }]
@@ -268,7 +268,7 @@ test pda-2.2 {} -constraints {} -setup {
     sqlite3 ::dbcmd :memory:
     source ../../tcldocs/topdir/lib/td/dbinit.tcl
     source ../../tcldocs/topdir/lib/td/db.tcl
-    set slave [PDASlave new {
+    set slave [::PDA::Slave new {
         action init
     }]
     $slave source pdaslave.tcl
@@ -339,8 +339,8 @@ test pda-2.2 {} -constraints {} -setup {
 
 test pda-3.0 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -447,7 +447,7 @@ test pda-3.0 {} -constraints {} -setup {
 
 test pda-3.1 {} -constraints {} -setup {
     set res {}
-    PDA create M {
+    ::PDA::PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
         Γ {S B Q C}
@@ -455,7 +455,7 @@ test pda-3.1 {} -constraints {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin PDAWithSlave
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 1]
@@ -479,7 +479,7 @@ test pda-3.1 {} -constraints {} -setup {
 
 test pda-3.2 {} -constraints {} -setup {
     set res {}
-    PDA create M {
+    ::PDA::PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
         Γ {S B Q C}
@@ -487,7 +487,7 @@ test pda-3.2 {} -constraints {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin PDAWithSlave
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 2]
@@ -509,7 +509,7 @@ test pda-3.2 {} -constraints {} -setup {
 
 test pda-3.3 {} -constraints {} -setup {
     set res {}
-    PDA create M {
+    ::PDA::PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
         Γ {S B Q C}
@@ -517,7 +517,7 @@ test pda-3.3 {} -constraints {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin PDAWithSlave
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 3]
@@ -542,8 +542,8 @@ test pda-3.3 {} -constraints {} -setup {
 
 test pda-3.4 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 4]
@@ -566,8 +566,8 @@ test pda-3.4 {} -constraints {} -setup {
 
 test pda-3.5 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 5]
@@ -586,8 +586,8 @@ test pda-3.5 {} -constraints {} -setup {
 
 test pda-3.6 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 6]
@@ -609,8 +609,8 @@ test pda-3.6 {} -constraints {} -setup {
 
 test pda-3.7 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 7]
@@ -634,8 +634,8 @@ test pda-3.7 {} -constraints {} -setup {
 
 test pda-3.8 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 8]
@@ -665,8 +665,8 @@ test pda-3.8 {} -constraints {} -setup {
 
 test pda-3.9 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 9]
@@ -699,8 +699,8 @@ test pda-3.9 {} -constraints {} -setup {
 
 test pda-3.10 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 10]
@@ -724,8 +724,8 @@ test pda-3.10 {} -constraints {} -setup {
 
 test pda-3.11 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 11]
@@ -748,8 +748,8 @@ test pda-3.11 {} -constraints {} -setup {
 
 test pda-3.12 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 12]
@@ -775,8 +775,8 @@ test pda-3.12 {} -constraints {} -setup {
 
 test pda-3.13 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 13]
@@ -801,8 +801,8 @@ test pda-3.13 {} -constraints {} -setup {
 
 test pda-3.14 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 14]
@@ -826,8 +826,8 @@ test pda-3.14 {} -constraints {} -setup {
 
 test pda-3.15 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 15]
@@ -856,8 +856,8 @@ test pda-3.15 {} -constraints {} -setup {
 
 test pda-3.16 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 16]
@@ -882,8 +882,8 @@ test pda-3.16 {} -constraints {} -setup {
 
 test pda-3.17 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 17]
@@ -906,8 +906,8 @@ test pda-3.17 {} -constraints {} -setup {
 
 test pda-3.18 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 18]
@@ -932,8 +932,8 @@ test pda-3.18 {} -constraints {} -setup {
 
 test pda-3.19 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 19]
@@ -958,8 +958,8 @@ test pda-3.19 {} -constraints {} -setup {
 
 test pda-3.20 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 20]
@@ -994,8 +994,8 @@ test pda-3.20 {} -constraints {} -setup {
 
 test pda-3.21 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 21]
@@ -1024,10 +1024,9 @@ test pda-3.21 {} -constraints {} -setup {
 
 test pda-3.22 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
-    oo::objdefine M mixin -append Dump
 } -body {
     set code [lindex $snippets 22]
     set tokens [lmap token [::string::token text $lex $code] {
@@ -1052,8 +1051,8 @@ test pda-3.22 {} -constraints {} -setup {
 
 test pda-3.23 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 23]
@@ -1082,8 +1081,8 @@ test pda-3.23 {} -constraints {} -setup {
 
 test pda-3.24 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 24]
@@ -1101,8 +1100,8 @@ test pda-3.24 {} -constraints {} -setup {
 
 test pda-3.25 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code [lindex $snippets 25]
@@ -1126,8 +1125,8 @@ test pda-3.25 {} -constraints {} -setup {
 
 test pda-4.0 {} -constraints {} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code {puts $::argv}
@@ -1146,8 +1145,8 @@ test pda-4.0 {} -constraints {} -setup {
 
 test static-4.1 {} -constraints {TODO} -setup {
     set res {}
-    PDA create M $machineDefinition
-    oo::objdefine M mixin PDAWithSlave
+    ::PDA::PDA create M $machineDefinition
+    oo::objdefine M mixin ::PDA::PDAWithSlave
     M set δ $transitions
 } -body {
     set code {oo::class new foo ; foo new bar}

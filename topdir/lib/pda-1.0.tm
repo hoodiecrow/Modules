@@ -1,7 +1,8 @@
-package require local::logger
 package require struct::stack
 
-oo::class create Stack {
+namespace eval PDA {}
+
+oo::class create ::PDA::Stack {
     # A stack that delegates to struct::stack except that it protects its
     # bottom element from popping and that it offers an 'adjust' method for
     # mutation.
@@ -41,7 +42,7 @@ oo::class create Stack {
     }
 }
 
-oo::class create PDASlave {
+oo::class create ::PDA::Slave {
     # Defines the methods reset, source, and fields; delegates everything else
     # to a safe interpreter. If given an argument, the reset method will
     # evaluate it in the interpreter as a script. The source method invokes
@@ -100,7 +101,7 @@ proc ::tcl::mathfunc::diff {a b} {
 # Z : the initial stack contents
 # F : the set of accept states
 # 
-oo::class create PDA {
+oo::class create ::PDA::PDA {
     variable tuple state stack
 
     constructor args {
@@ -155,7 +156,7 @@ oo::class create PDA {
     method Init {} {
         dict with tuple {
             set state $s
-            set stack [Stack new $Z]
+            set stack [::PDA::Stack new $Z]
         }
     }
 
@@ -196,7 +197,7 @@ oo::class create PDA {
 
 }
 
-oo::class create PDAWithSlave {
+oo::class create ::PDA::PDAWithSlave {
     variable tuple state slave
 
     method Init _s {
