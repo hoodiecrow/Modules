@@ -130,10 +130,6 @@ oo::class create PDA {
         dict get $tuple $key
     }
 
-    method path {} {
-        return $path
-    }
-
     method addTransition {qp ap Xp value} {
         # Add new items to the transition dictionary. The first three arguments
         # are glob-style patterns for state labels, input symbols, and stack
@@ -203,13 +199,14 @@ oo::class create PDA {
 oo::class create PDAWithSlave {
     variable tuple state slave
 
-    method Init args {
-        next {*}[lrange $args 0 end-1]
-        set slave [lindex $args end]
+    method Init _s {
+        next
+        set slave $_s
         $slave reset
     }
 
     method Exec action {
+        next $action
         $slave eval $action
     }
 
@@ -224,8 +221,8 @@ oo::class create PDAWithSlave {
         }
     }
 
-    method read {tokens slave} {
-        my Init $slave
+    method read {tokens _s} {
+        my Init $_s
         set result {}
         try {
             foreach token [linsert $tokens end ε] {

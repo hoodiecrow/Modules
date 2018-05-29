@@ -1,13 +1,19 @@
-set collectedOutput {}
+namespace eval ::EMIT {
+    variable output {}
+    namespace export emit
+}
 
-proc emit args {
+proc ::EMIT::emit args {
+    # Basic routine to handle output. If the first argument is '-clear', the
+    # output list is cleared. Otherwise, the list of arguments is appended to
+    # it (meaning that if no arguments are given, the output list is unchanged.
+    # The output list is returned.
+    variable output
     if {[lindex $args 0] eq "-clear"} {
-        set ::collectedOutput {}
+        set output {}
     } else {
-        if {[llength $args] > 0} {
-            lappend ::collectedOutput {*}$args
-        } else {
-            set ::collectedOutput
-        }
+        lappend output {*}$args
     }
 }
+
+namespace import ::EMIT::emit
