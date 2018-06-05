@@ -2,17 +2,31 @@
 namespace eval automaton {}
 
 oo::class create ::automaton::Base {
-    variable data options head
+    variable data options head values
 
     constructor args {
         array set options {
+            -values {}
             -start -1
             -blank _
             -length -1
             -leftbound 0
             -rightbound -1
         }
-        set data [my SetOptions {*}$args]
+        set args [my SetOptions {*}$args]
+        set values [lmap value $options(-values) {lindex $value 0}]
+        if {[llength $values] > 0} {
+            lappend values $options(-blank)
+            if {[info exists options(-empty)]} {
+                lappend values $options(-empty)
+            }
+        }
+        set head 0
+        set data {}
+        foreach arg $args {
+            my Update $arg
+            incr head
+        }
         my ResetHead
     }
 
@@ -42,7 +56,17 @@ oo::class create ::automaton::Base {
         lindex $data $head
     }
 
+    method CheckValues val {
+        if {[llength $values] > 0 && [lindex $val 0] ni $values} {
+                return -code error \
+                    [format {illegal value "%s" not in "%s"} \
+                        $val \
+                        [join [lmap value $options(-values) {lindex $value 0}] {, }]]
+        }
+    }
+
     method Update val {
+        my CheckValues $val
         lset data $head $val
     }
 

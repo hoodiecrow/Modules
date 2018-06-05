@@ -126,8 +126,8 @@ oo::class create ::PDA::PDA {
     method Init tokens {
         dict with tuple {
             set state $s
-            set stack [::PDA::Stack new $Z]
-            set input [::automaton::Input new -empty ε {*}$tokens]
+            set stack [::PDA::Stack new -values ${Γ} $Z]
+            set input [::automaton::Input new -values ${Σ} -empty ε {*}$tokens]
         }
     }
 

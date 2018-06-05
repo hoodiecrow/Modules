@@ -22,8 +22,8 @@ test tape-1.0 {} -body {
 
 test tape-1.1 {} -body {
     ::automaton::Tape create foo a b c
-    oo::objdefine foo export variable
     foo R ; foo L ; foo L ; foo L ; foo L
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
@@ -33,8 +33,8 @@ test tape-1.1 {} -body {
 
 test tape-1.2 {} -body {
     ::automaton::Tape create foo -length 4 a b c
-    oo::objdefine foo export variable
     foo R ; foo L ; foo L ; foo L ; foo L
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
@@ -44,8 +44,8 @@ test tape-1.2 {} -body {
 
 test tape-1.3 {} -body {
     ::automaton::Tape create foo -length 3 a b c
-    oo::objdefine foo export variable
     foo R ; foo L ; foo L ; foo L ; foo L
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
@@ -55,8 +55,8 @@ test tape-1.3 {} -body {
 
 test tape-1.4 {} -body {
     ::automaton::Tape create foo a b c
-    oo::objdefine foo export variable
     foo L ; foo write x
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
@@ -66,8 +66,8 @@ test tape-1.4 {} -body {
 
 test tape-1.5 {} -body {
     ::automaton::Tape create foo a b c
-    oo::objdefine foo export variable
     foo L ; foo erase
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
@@ -77,8 +77,8 @@ test tape-1.5 {} -body {
 
 test tape-1.6 {} -body {
     ::automaton::Tape create foo -blank X a b c
-    oo::objdefine foo export variable
     foo L ; foo erase
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head [foo read]
 } -cleanup {
@@ -110,8 +110,8 @@ test tape-1.8 {} -body {
 
 test tape-1.9 {} -body {
     ::automaton::Tape create foo -leftbound 1 -start 0 a b c
-    oo::objdefine foo export variable
     foo L
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
@@ -121,14 +121,19 @@ test tape-1.9 {} -body {
 
 test tape-1.10 {} -body {
     ::automaton::Tape create foo -rightbound 3 a b c
-    oo::objdefine foo export variable
     foo R ; foo R ; foo R
+    oo::objdefine foo export variable
     foo variable data head
     list $data $head
 } -cleanup {
     unset data head
     foo destroy
 } -result {{a b c} 2}
+
+test tape-1.11 {} -body {
+    ::automaton::Tape create foo -values {a {b 1} c} a b x c
+} -cleanup {
+} -result {illegal value "x" not in "a, b, c"} -returnCodes error
 
 test stack-1.0 {} -body {
     ::automaton::Stack create foo
