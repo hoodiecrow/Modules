@@ -14,13 +14,7 @@ oo::class create ::automaton::Base {
             -rightbound -1
         }
         set args [my SetOptions {*}$args]
-        set values [lmap value $options(-values) {lindex $value 0}]
-        if {[llength $values] > 0} {
-            lappend values $options(-blank)
-            if {[info exists options(-empty)]} {
-                lappend values $options(-empty)
-            }
-        }
+        set values [my SetValues $options(-values)]
         set head 0
         set data {}
         foreach arg $args {
@@ -50,6 +44,17 @@ oo::class create ::automaton::Base {
             lappend args $options(-default)
         }
         return $args
+    }
+
+    method SetValues vals {
+        set vals [lmap val $vals {lindex $val 0}]
+        if {[llength $vals] > 0} {
+            lappend vals $options(-blank)
+            if {[info exists options(-empty)]} {
+                lappend vals $options(-empty)
+            }
+        }
+        return $vals
     }
 
     method Read {} {
