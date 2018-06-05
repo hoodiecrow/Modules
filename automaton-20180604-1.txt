@@ -1,0 +1,135 @@
+
+                        NFA 			DFAa		DFAt		PDA		TM
+
+set of states		Q			S (ne)		S (ne)		Q		Q (ne)
+set of input symbols	Σ			Σ (ne)          Σ (ne)		Σ		Σ ss Γ \ b
+set of output symbols 						Γ		
+set of stack symbols 						 		Γ
+set of tape symbols                                                                             Γ
+transition function	Δ : Q × Σ → P(Q)	δ : S × Σ → S   δ		δ : (Q × Σε × Γ) → P(Q × Γ*)
+output function                                                 ω
+initial state		q0 (in Q)		s (in S)        s (in S)	q0 (in Q)	q0 (in Q)
+initial stack symbol                                                            Z0
+set of accepting states	F  (ss Q)		F (ss S)        F (ss S)	A (ss Q)	F (ss Q)
+blank symbol                                                                          		b (in Γ)
+
+δ for TM:
+
+δ : (Q \ F) × Γ → Q × Γ × {L R}
+
+
+Σε == Σ U {ε}
+
+P(Q) == returns a set of states
+
+
+in == member of
+ss == subset of
+ne == non-empty
+
+ω : S × Σ → Γ ; corresponds to Mealy model
+ω : S → Γ     ; corresponds to Moore model
+
+set of states			S
+set of symbols			Y
+set of tape alphabet symbols	A
+set of input symbols		I = (Y U e) or (A \ _)
+set of output symbols		O
+set of stack symbols		T
+set of accepting states		F
+set of transitable states	Q = S or (S \ F)
+transition function		transition
+output function			output
+initial state			q (in Q)
+initial stack			t (in T)
+blank symbol			_ (in A)
+empty symbol			e (ni (Y U A))
+left end symbol			[ (ni A)
+right end symbol		] (ni A)
+
+transition function variants
+Q × I     → S
+Q × I × T → S × T*
+Q × I     → S × A × {L R}
+
+output function variants 
+Q × I → O ; corresponds to Mealy model
+Q     → O ; corresponds to Moore model
+
+left end marker
+right end marker
+
+initialization NFA		DFAa		DFAt		PDA			TM
+S		S		S		S		S			S
+Y/A		Y		Y               Y		Y			A
+I formula	(Y U ε)                                  				A \ _
+O						O
+T               _               _               _        	T			_
+F		F		F				F			F
+Q formula	S               S               S        	S			(S \ F)
+q		q		q               q		q			q
+t                                                        	t
+_                                                        				b
+e                                                        
+transition	Q × I → S	Q × I → S       Q × I → S	Q × I × T → S × T*	Q × I → S × A × {L R}
+output						Q(× I)→ O
+
+state tuple (ST)
+Q I? T?
+
+transition function (TF)
+ST -> S T* A? M
+
+Tape create stack {[} 0
+
+oo::class create Tape {
+    variable data head
+    constructor args {
+        lassign $args data head
+    }
+method top {} {
+    lindex $data $head
+}
+method Write val {
+    if {[my top] eq $bottom} {
+        my Right
+    }
+    lset data $head $val
+}
+method Right {} {
+    incr head
+}
+method Left {} {
+    if {[my top] ne $bottom} {
+        incr head -1
+    }
+}
+method push items {
+    foreach item $items {
+        my Write $item
+        my Right
+    }
+    my Write $blank
+    my Left
+}
+}
+
+output function (OF)
+ST -> O
+
+transition matrix (values are text patterns)
+FSM	Q I _ -> S _  _ R
+PDA	Q I T -> S T* _ R
+TM	Q I _ -> S _  A L/R
+
+output matrix
+FSM	Q I? _  -> O
+FDA	Q I? T? -> O
+TM	Q I? _  -> O
+
+http://pages.iu.edu/~madcanda/q350/tm_sim_tuple.html
+length of tape
+starting position
+initial tape contents
+transition tuples (current_state input output/move next_state)
+initial state
