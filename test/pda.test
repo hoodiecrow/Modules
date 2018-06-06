@@ -22,7 +22,7 @@ dict set δ (q1,ε,S) {qf {}}
 
 test pda-1.0 {} -setup {
     set res {}
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     lindex [M read {}] 0
 } -cleanup {
@@ -33,7 +33,7 @@ test pda-1.0 {} -setup {
 
 test pda-1.1 {} -setup {
     set res {}
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     lindex [M read {0 0 0 0 1 1 1 1}] 0
 } -cleanup {
@@ -44,7 +44,7 @@ test pda-1.1 {} -setup {
 
 test pda-1.2 {} -setup {
     set res {}
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     lindex [M read {0 0 0 0 1 1 1 1 1}] 0
 } -cleanup {
@@ -55,7 +55,7 @@ test pda-1.2 {} -setup {
 
 test pda-1.3 {} -setup {
     set res {}
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     M read {0 1 1}
 } -cleanup {
@@ -66,7 +66,7 @@ test pda-1.3 {} -setup {
 
 test pda-1.4 {} -setup {
     set res {}
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ ${δ} s q0 Z S F {qe qf}]
 } -body {
     M read {0 1 1}
 } -cleanup {
@@ -78,7 +78,7 @@ test pda-1.4 {} -setup {
 test pda-1.5 {} -setup {
     set res {}
 } -body {
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Γ {S} s q666 Z S]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Γ {S} s q666 Z S]
 } -cleanup {
     log::lvSuppressLE i 1
 } -result {illegal start state "q666"} -returnCodes error
@@ -86,15 +86,15 @@ test pda-1.5 {} -setup {
 
 test pda-1.6 {} -setup {
     set res {}
-    ::PDA::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
-    oo::objdefine M mixin ::PDA::PDAWithSlave
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S Z} δ {} s q0 Z S F {qe qf}]
+    oo::objdefine M mixin ::pda::PDAWithSlave
     M addTransition q0      ε S {qe {}    {emit success "no input"}}
     M addTransition q0      0 S {q0 Z     {emit LVL [incr n]}}
     M addTransition q0      0 Z {q0 {Z Z} {emit LVL [incr n]}}
     M addTransition {q[01]} 1 Z {q1 {}    {emit LVL [incr n -1]}}
     M addTransition q1      ε S {qf {}    {emit success match}}
 } -body {
-    set slave [::PDA::Slave new {emit -clear}]
+    set slave [::pda::Slave new {emit -clear}]
     $slave source pdaslave.tcl
     M read {} $slave
     lappend res [$slave eval emit]
@@ -110,7 +110,7 @@ test pda-1.6 {} -setup {
 
 test pda-2.0 {} -setup {
     set res {}
-    ::PDA::PDA create M {
+    ::pda::PDA create M {
         Q {q0 q1 q2 q3 q4 qe qf}
         Σ {sp w nl}
         Γ {S}
@@ -118,7 +118,7 @@ test pda-2.0 {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin ::PDA::PDAWithSlave
+    oo::objdefine M mixin ::pda::PDAWithSlave
     M addTransition {q[0-4]} nl S {q0 {}    {}}
     M addTransition q0       ε  S {qe {}    {emit success "no input"}}
     M addTransition q0       sp S {q0 {}    {}}
@@ -142,7 +142,7 @@ test pda-2.0 {} -setup {
 
 test pda-2.1 {} -setup {
     set res {}
-    ::PDA::PDA create M {
+    ::pda::PDA create M {
         Q {q0 q1 q2 q3 q4 qe qf}
         Σ {sp w n}
         Γ {S}
@@ -160,7 +160,7 @@ test pda-2.1 {} -setup {
 
 test pda-2.2 {} -constraints {} -setup {
     set res {}
-    ::PDA::PDA create M {
+    ::pda::PDA create M {
         Q {qe qf q0 q1 q2 q3 q4}
         Σ {sp w nl lb rb dq lc rc em}
         Γ {S B Q C}
@@ -168,7 +168,7 @@ test pda-2.2 {} -constraints {} -setup {
         Z S
         F {qe qf}
     }
-    oo::objdefine M mixin ::PDA::PDAWithSlave
+    oo::objdefine M mixin ::pda::PDAWithSlave
     # qe    script empty
     # qf    script finished
     # q0    start state, before script
@@ -246,7 +246,7 @@ test pda-2.2 {} -constraints {} -setup {
     {\]}                                    rb
     .                                       Other
     }
-    set slave [::PDA::Slave new {
+    set slave [::pda::Slave new {
         emit init
         emit enter S
     }]

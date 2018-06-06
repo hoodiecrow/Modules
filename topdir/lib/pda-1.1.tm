@@ -1,9 +1,9 @@
 package require struct::stack
 package require automaton
 
-namespace eval PDA {}
+namespace eval pda {}
 
-oo::class create ::PDA::Stack {
+oo::class create ::pda::Stack {
     superclass ::automaton::Stack
     forward peek my Read
 
@@ -12,7 +12,7 @@ oo::class create ::PDA::Stack {
     }
 }
 
-oo::class create ::PDA::Slave {
+oo::class create ::pda::Slave {
     # Defines the methods reset, source, and fields; delegates everything else
     # to a safe interpreter. If given an argument, the reset method will
     # evaluate it in the interpreter as a script. The source method invokes
@@ -71,7 +71,7 @@ proc ::tcl::mathfunc::diff {a b} {
 # Z : the initial stack contents
 # F : the set of accept states
 # 
-oo::class create ::PDA::PDA {
+oo::class create ::pda::PDA {
     variable tuple state stack input
 
     constructor args {
@@ -126,7 +126,7 @@ oo::class create ::PDA::PDA {
     method Init tokens {
         dict with tuple {
             set state $s
-            set stack [::PDA::Stack new -values ${Γ} $Z]
+            set stack [::pda::Stack new -values ${Γ} $Z]
             set input [::automaton::Input new -values ${Σ} -empty ε {*}$tokens]
         }
     }
@@ -172,7 +172,7 @@ oo::class create ::PDA::PDA {
 
 }
 
-oo::class create ::PDA::PDAWithSlave {
+oo::class create ::pda::PDAWithSlave {
     variable tuple state slave input
 
     method Init {tokens _s} {
