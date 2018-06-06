@@ -37,8 +37,11 @@ oo::class create ::automaton::Base {
 
     method SetOptions args {
         while {[string match -* [lindex $args 0]]} {
-            set args [lassign $args opt val]
-            set options($opt) $val
+            if {[lindex $args 0] eq "--"} {
+                set args [lrange $args 1 end]
+                break
+            }
+            set args [lassign $args opt options($opt)]
         }
         if {[info exists options(-default)] && [llength $args] eq 0} {
             lappend args $options(-default)
