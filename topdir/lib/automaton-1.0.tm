@@ -259,3 +259,39 @@ oo::class create ::automaton::Input {
     }
 
 }
+
+oo::class create ::automaton::State {
+    # Behavior
+    # get, set, accept
+    # no movement
+    # -default (start value)
+    # -accept (list of accepting states)
+    # ignore all Base options except -values
+    superclass ::automaton::Base
+
+    variable data options head
+
+    constructor args {
+        array set options {
+            -accept {}
+        }
+        next -start 0 {*}$args
+        if {[llength $data] > 1} {
+            set head 1
+            my CutRight
+        }
+    }
+
+    method get {} {
+        my Read
+    }
+
+    method set val {
+        my Update $val
+    }
+
+    method accept {} {
+        expr {[my Read] in $options(-accept)}
+    }
+
+}
