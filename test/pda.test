@@ -78,10 +78,12 @@ test pda-1.4 {} -setup {
 test pda-1.5 {} -setup {
     set res {}
 } -body {
-    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Γ {S} s q666 Z S]
+    ::pda::PDA create M [dict create Q {q0 q1 qe qf} Σ {0 1} Γ {S} s q666 Z S]
+    M read {0}
 } -cleanup {
+    M destroy
     log::lvSuppressLE i 1
-} -result {illegal start state "q666"} -returnCodes error
+} -result {illegal state value "q666" not in "q0, q1, qe, qf"} -returnCodes error
 
 
 test pda-1.6 {} -setup {

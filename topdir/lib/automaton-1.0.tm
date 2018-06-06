@@ -19,7 +19,11 @@ oo::class create ::automaton::Base {
         set data {}
         foreach arg $args {
             my Update $arg
+            # use incr instead of R to avoid blanking a cell
             incr head
+            if {$options(-rightbound) > 0 && $head > $options(-rightbound)} {
+                return -code error [format {initial values past right bound}]
+            }
         }
         my ResetHead
     }
@@ -67,7 +71,8 @@ oo::class create ::automaton::Base {
     method CheckValues val {
         if {[llength $values] > 0 && [lindex $val 0] ni $values} {
                 return -code error \
-                    [format {illegal value "%s" not in "%s"} \
+                    [format {illegal %s value "%s" not in "%s"} \
+                        [string tolower [namespace tail [info object class [self object]]]] \
                         $val \
                         [join [lmap value $options(-values) {lindex $value 0}] {, }]]
         }
@@ -266,19 +271,28 @@ oo::class create ::automaton::State {
     # no movement
     # -default (start value)
     # -accept (list of accepting states)
-    # ignore all Base options except -values
+    # ignore all Base options except -values -start -rightbound
     superclass ::automaton::Base
 
-    variable data options head
+    variable data options values head
 
     constructor args {
         array set options {
             -accept {}
         }
-        next -start 0 {*}$args
-        if {[llength $data] > 1} {
-            set head 1
-            my CutRight
+        next -start 0 -rightbound 1 {*}$args
+        my CheckAcceptStates
+    }
+
+    method CheckAcceptStates {} {
+        set illegal {}
+        foreach s $options(-accept) {
+            if {$s ni $values} {
+                lappend illegal $s
+            }
+        }
+        if {[llength $illegal] > 0} {
+            return -code error [format {illegal accepting state(s) (%s)} [join $illegal {, }]]
         }
     }
 

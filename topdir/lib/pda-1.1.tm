@@ -3,15 +3,6 @@ package require automaton
 
 namespace eval pda {}
 
-oo::class create ::pda::Stack {
-    superclass ::automaton::Stack
-    forward peek my Read
-
-    method get {} {
-        lreverse [my Data]
-    }
-}
-
 oo::class create ::pda::Slave {
     # Defines the methods reset, source, and fields; delegates everything else
     # to a safe interpreter. If given an argument, the reset method will
@@ -81,10 +72,6 @@ oo::class create ::pda::PDA {
                 dict set tuple $key {}
             }
         }
-        dict with tuple {}
-        my Check {$s ni $Q} {illegal start state "%s"} $s
-        my Check {$Z ni ${Γ}} {illegal stack symbol "%s"} $Z
-        my Check {!subset($F, $Q)} {illegal accepting state(s) (%s)} [join [expr {diff($F, $Q)}] {, }]
     }
 
     method Check {cond args} {
@@ -125,8 +112,9 @@ oo::class create ::pda::PDA {
 
     method Init tokens {
         dict with tuple {
-            set state $s
-            set stack [::pda::Stack new -values ${Γ} $Z]
+            set state [::automaton::State new -values $Q -accept $F $s]
+            set stack [::automaton::Stack new -values ${Γ} $Z]
+            oo::objdefine $stack method get {} { lreverse [my Data] }
             set input [::automaton::Input new -values ${Σ} -empty ε {*}$tokens]
         }
     }
@@ -138,12 +126,13 @@ oo::class create ::pda::PDA {
             set token [$input read]
         }
         dict with tuple {}
-        set current ($state,[lindex $token 0],[$stack peek])
+        set current ([$state get],[lindex $token 0],[$stack top])
         if {[dict exists ${δ} $current]} {
-            lassign [dict get ${δ} $current] state γ action
+            lassign [dict get ${δ} $current] _state γ action
+            $state set $_state
             $stack adjust {*}${γ}
             my Exec $action
-            return [list $current -> $state [$stack get]]
+            return [list $current -> [$state get] [$stack get]]
         } else {
             return -code error [list $current -> FAIL]
         }
@@ -162,7 +151,7 @@ oo::class create ::pda::PDA {
                 lappend result [my Each]
             }
         } on ok {} {
-            concat [expr {$state in [my get F]}] [lappend result {}]
+            concat [$state accept] [lappend result {}]
         } on error err {
             concat 0 [lappend result $err]
         } finally {
@@ -212,7 +201,7 @@ oo::class create ::pda::PDAWithSlave {
                 lappend result [my Each]
             }
         } on ok {} {
-            concat [expr {$state in [my get F]}] [lappend result {}]
+            concat [$state get] [lappend result {}]
         } on error err {
             concat 0 [lappend result $err]
         } finally {
