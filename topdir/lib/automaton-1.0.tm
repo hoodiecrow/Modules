@@ -12,20 +12,37 @@ oo::class create ::automaton::Base {
             -length -1
             -leftbound 0
             -rightbound -1
+            -endmarkers {}
+            -fill 0
         }
         set args [my SetOptions {*}$args]
         set values [my SetValues $options(-values)]
         set head 0
         set data {}
-        foreach arg $args {
-            my Update $arg
-            # use incr instead of R to avoid blanking a cell
-            incr head
-            if {$options(-rightbound) > 0 && $head > $options(-rightbound)} {
-                return -code error [format {initial values past right bound}]
-            }
-        }
+        my WriteFill
+        my WriteInitialValues $args
         my ResetHead
+    }
+
+    method WriteFill {} {
+        if {[llength $options(-endmarkers)] > 0 && $options(-fill) > 0} {
+            set data [linsert $options(-endmarkers) 1 {*}[lrepeat $options(-fill) $options(-blank)]]
+            if {$options(-start) < 1} {
+                set options(-start) 1
+            } elseif {$options(-start) >= [llength $data]} {
+                set options(-start) [expr {[llength $data] - 1}]
+            } else {
+                incr options(-start)
+            }
+            set head 1
+        }
+    }
+
+    method WriteInitialValues vals {
+        foreach val $vals {
+            my Update $val
+            catch { my Right }
+        }
     }
 
     method ResetHead {} {
@@ -56,7 +73,7 @@ oo::class create ::automaton::Base {
     method SetValues vals {
         set vals [lmap val $vals {lindex $val 0}]
         if {[llength $vals] > 0} {
-            lappend vals $options(-blank)
+            lappend vals $options(-blank) {*}$options(-endmarkers)
             if {[info exists options(-empty)]} {
                 lappend vals $options(-empty)
             }
@@ -70,25 +87,37 @@ oo::class create ::automaton::Base {
 
     method CheckValues val {
         if {[llength $values] > 0 && [lindex $val 0] ni $values} {
-                return -code error \
-                    [format {illegal %s value "%s" not in "%s"} \
-                        [string tolower [namespace tail [info object class [self object]]]] \
-                        $val \
-                        [join [lmap value $options(-values) {lindex $value 0}] {, }]]
+            return -code error \
+                [format {illegal %s value "%s" not in "%s"} \
+                    [string tolower [namespace tail [info object class [self object]]]] \
+                    $val \
+                    [join [lmap value $options(-values) {lindex $value 0}] {, }]]
+        }
+    }
+
+    method CheckEndmarker {} {
+        if {
+            [llength $options(-endmarkers)] > 0 &&
+            [lindex $data $head] in $options(-endmarkers)
+        } then {
+            return -code error [format {attempting to overwrite endmarker "%s"} [lindex $data $head]]
         }
     }
 
     method Update val {
         my CheckValues $val
+        my CheckEndmarker
         lset data $head $val
+        self
     }
 
     method Blank {} {
         lset data $head $options(-blank)
+        return
     }
 
     method Data {} {
-        set data
+        return $data
     }
 
     method CutLeft {} {
@@ -113,6 +142,13 @@ oo::class create ::automaton::Base {
         }
     }
 
+    method AtLeftMarker {} {
+        expr {
+            [llength $options(-endmarkers)] > 0 &&
+            [lindex $data $head] eq [lindex $options(-endmarkers) 0]
+        }
+    }
+
     method AtLeftEdge {} {
         if {$options(-leftbound)} {
             expr {$head < 1}
@@ -122,10 +158,20 @@ oo::class create ::automaton::Base {
     }
 
     method Left {} {
+        if {[my AtLeftMarker]} {
+            return -code error [format {attempted to move left beyond end marker}]
+        }
         if {![my AtLeftEdge]} {
             incr head -1
         }
         return
+    }
+
+    method AtRightMarker {} {
+        expr {
+            [llength $options(-endmarkers)] > 0 &&
+            [lindex $data $head] eq [lindex $options(-endmarkers) 1]
+        }
     }
 
     method AtRightEdge {} {
@@ -137,6 +183,9 @@ oo::class create ::automaton::Base {
     }
 
     method Right {} {
+        if {[my AtRightMarker]} {
+            return -code error [format {attempted to move right beyond end marker}]
+        }
         if {![my AtRightEdge]} {
             incr head
         }
@@ -154,8 +203,8 @@ oo::class create ::automaton::Tape {
         next {*}$args
     }
 
-    forward read my Read
-    forward write my Update
+    forward get my Read
+    forward set my Update
     forward erase my Blank
     method L {} {
         my Left
@@ -175,7 +224,15 @@ oo::class create ::automaton::Tape {
             set head [expr {[llength $data] - 1}]
         }
     }
-    export L R
+    method J addr {
+        # TODO check edges and markers
+        if {[string match {\**} $addr]} {
+            incr head [string range $addr 1 end]
+        } else {
+            set head $addr
+        }
+    }
+    export L R J
 
 }
 
@@ -254,7 +311,7 @@ oo::class create ::automaton::Input {
         return $hasTokens
     }
 
-    method read {} {
+    method get {} {
         set val [my Read]
         if {[my AtRightEdge]} {
             set hasTokens 0
@@ -294,6 +351,15 @@ oo::class create ::automaton::State {
         if {[llength $illegal] > 0} {
             return -code error [format {illegal accepting state(s) (%s)} [join $illegal {, }]]
         }
+    }
+
+    method incr {{n 1}} {
+        set v [my Read]
+        incr v $n
+        if {$v > $options(-limit)} {
+            return -code error [format {value overflow: %d} $v]
+        }
+        my Update $v
     }
 
     method get {} {

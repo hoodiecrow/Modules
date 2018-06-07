@@ -59,7 +59,7 @@ test tape-1.3 {} -body {
 
 test tape-1.4 {} -body {
     ::automaton::Tape create foo a b c
-    foo L ; foo write x
+    foo L ; foo set x
     oo::objdefine foo export variable
     foo variable data head
     list $data $head
@@ -86,7 +86,7 @@ test tape-1.6 {} -body {
     foo L ; foo erase
     oo::objdefine foo export variable
     foo variable data head
-    list $data $head [foo read]
+    list $data $head [foo get]
 } -cleanup {
     unset data head
     foo destroy
@@ -146,6 +146,18 @@ test tape-1.11 {} -body {
 } -cleanup {
     log::lvSuppressLE i 1
 } -result {illegal tape value "x" not in "a, b, c"} -returnCodes error
+
+test tape-1.12 {} -body {
+    ::automaton::Tape create foo -values {a b c} -endmarkers {< >} -fill 7 a b c
+    oo::objdefine foo export variable
+    foo variable data head
+    list $data $head
+} -cleanup {
+    unset data head
+    foo destroy
+    log::lvSuppressLE i 1
+} -result {{< a b c _ _ _ _ >} 1}
+
 
 test stack-1.0 {} -body {
     ::automaton::Stack create foo
@@ -268,7 +280,7 @@ test input-1.2 {} -body {
     ::automaton::Input create foo -empty E a b c
     set res {}
     for {set i 0} {$i < 5} {incr i} {
-        lappend res [foo read]
+        lappend res [foo get]
     }
     oo::objdefine foo export variable
     foo variable data head
@@ -326,15 +338,326 @@ test state-1.2 {} -body {
 } -result {a 0 1}
 
 test state-1.3 {} -body {
-    ::automaton::State create foo -accept {a b} -values {a b c d e} e d c
-} -cleanup {
-    log::lvSuppressLE i 1
-} -result {initial values past right bound} -returnCodes error
-
-test state-1.4 {} -body {
     ::automaton::State create foo -accept {a x} -values {a b c d e} -default e
 } -cleanup {
     log::lvSuppressLE i 1
 } -result {illegal accepting state(s) (x)} -returnCodes error
+
+test state-1.4 {} -body {
+    ::automaton::State create foo -accept {a b} -values {a b c d e} e d c
+    oo::objdefine foo export variable
+    foo variable data head
+    list $data $head
+} -cleanup {
+    unset data head
+    foo destroy
+    log::lvSuppressLE i 1
+} -result {c 0}
+
+proc nextState {tuple delim args} {
+    set wms [split $tuple $delim]
+    set c {}
+    catch { set c [$::counter get] }
+    log::log d "($c: [$::tape get],[$::state get],[join $wms ,]) : $args"
+    catch { $::counter incr }
+    return $wms
+}
+
+# 1-state, 2-symbol busy beaver
+#
+#   A
+# 0 1,R,H
+# 1 ---
+# 
+# Result: 0 0 1 0 0 (1 step, one "1" total)
+test bb-1.0 {} -body {
+    set tape  [::automaton::Tape new -values {0 1} -blank 0 -start 2 -endmarkers {< >} -fill 5]
+    set state [::automaton::State new -values {A B H} A]
+    set matrix {
+        0,A {1 R H}
+        1,A {- - -}
+    }
+    oo::objdefine $tape export variable
+    $tape variable data head
+    while {[$state get] ne "H"} {
+        lassign [dict get $matrix [$tape get],[$state get]] w m s
+        [$tape set $w] $m
+        $state set $s
+    }
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $state destroy
+    log::lvSuppressLE i 1
+} -result {{< 0 0 1 0 0 >} 4}
+
+# 2-state, 2-symbol busy beaver
+#
+#   A      B
+# 0 1,R,B  1,L,A
+# 1 1,L,B  1,R,H
+# 
+# Result: 0 0 1 1 1 1 0 0 (6 steps, four "1"s total)
+test bb-1.1 {} -body {
+    set tape  [::automaton::Tape new -values {0 1} -blank 0 -start 4 -endmarkers {< >} -fill 8]
+    set state [::automaton::State new -values {A B H} A]
+    set counter [::automaton::State new -limit 6 0]
+    set matrix [dict create {*}{
+        0,A {1 R B} 0,B {1 L A}
+        1,A {1 L B} 1,B {1 R H}
+    }]
+    oo::objdefine $tape export variable
+    $tape variable data head
+    while {[$state get] ne "H"} {
+        lassign [dict get $matrix [$tape get],[$state get]] w m s
+        [$tape set $w] $m
+        $state set $s
+        $counter incr
+    }
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $state destroy
+    $counter destroy
+    log::lvSuppressLE i 1
+} -result {{< 0 0 1 1 1 1 0 0 >} 5}
+
+# 3-state, 2-symbol busy beaver
+#
+#   A      B      C
+# 0 1,R,B  0,R,C  1,L,C
+# 1 1,R,H  1,R,B  1,L,A
+# 
+# Result: 0 0 1 1 1 1 1 1 0 0 (14 steps, six "1"s total).
+test bb-1.2 {} -body {
+    set tape  [::automaton::Tape new -values {0 1} -blank 0 -start 3 -endmarkers {< >} -fill 10]
+    set state [::automaton::State new -values {A B C H} A]
+    set counter [::automaton::State new -limit 14 0]
+    set matrix [dict create {*}{
+        0,A {1 R B} 0,B {0 R C} 0,C {1 L C}
+        1,A {1 R H} 1,B {1 R B} 1,C {1 L A}
+    }]
+    oo::objdefine $tape export variable
+    $tape variable data head
+    while {[$state get] ne "H"} {
+        lassign [dict get $matrix [$tape get],[$state get]] w m s
+        [$tape set $w] $m
+        $state set $s
+        $counter incr
+    }
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $state destroy
+    $counter destroy
+    log::lvSuppressLE i 1
+} -result {{< 0 0 1 1 1 1 1 1 0 0 >} 6}
+
+# 4-state, 2-symbol busy beaver
+
+#   A   B   C   D
+# 0 1RB 1LA 1RH 1RD 
+# 1 1LB 0LC 1LD 0RA 
+# 
+# Result: 0 0 1 0 1 1 1 1 1 1 1 1 1 1 1 1 0 0 (107 steps, thirteen "1"s total)
+test bb-1.3 {} -body {
+    set tape  [::automaton::Tape new -values {0 1} -blank 0 -start 12 -endmarkers {< >} -fill 18]
+    set state [::automaton::State new -values {A B C D H} A]
+    set counter [::automaton::State new -limit 107 0]
+    set matrix [dict create {*}{
+        0,A {1 R B} 0,B {1 L A} 0,C {1 R H} 0,D {1 R D}
+        1,A {1 L B} 1,B {0 L C} 1,C {1 L D} 1,D {0 R A}
+    }]
+    oo::objdefine $tape export variable
+    $tape variable data head
+    while {[$state get] ne "H"} {
+        lassign [dict get $matrix [$tape get],[$state get]] w m s
+        [$tape set $w] $m
+        $state set $s
+        $counter incr
+    }
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $state destroy
+    $counter destroy
+    log::lvSuppressLE i 1
+} -result {{< 0 0 1 0 1 1 1 1 1 1 1 1 1 1 1 1 0 0 >} 4}
+
+# 2-state, 2-symbol busy beaver as a Post-Turing machine
+#
+# Instruction # 0  1  2  3  4  5  6  7  8  9  10  11  12  13  14
+# Instruction   J1 P  R  J  P  L  J  J1 P  L  J   P   N   J   H 
+# Jump-to #     4        7        7  11       0           14  
+# 
+test ptbb-1.0 {} -body {
+    set tape [::automaton::Tape new -values {0 1} -blank 0 -start 4 -endmarkers {< >} -fill 8]
+    set program [::automaton::Tape new \
+        -values {H J J1 L N P R} \
+        -start 0 \
+        -endmarkers {< >} \
+        {J1 4} P R {J 7} P L {J 7} {J1 11} P L {J 0} P N {J 14} H]
+    oo::objdefine $program export variable
+    $program variable data head
+    while {[$program get] ne "H"} {
+        set p [$program get]
+        log::log d [format {%-2s: %s} $head $p]
+        switch [lindex $p 0] {
+            P { $tape set 1 ; $program R }
+            E { $tape erase ; $program R }
+            L - R { $tape $p ; $program R }
+            N { $program R }
+            J { $program J [lindex $p 1]}
+            J1 { if {[$tape get] eq 1} {$program J [lindex $p 1]} {$program R}}
+        }
+    }
+    unset data head
+    oo::objdefine $tape export variable
+    $tape variable data head
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $program destroy
+    log::lvSuppressLE i 1
+} -result {{< 0 0 1 1 1 1 0 0 >} 4}
+
+# 2-state, 2-symbol busy beaver as a Post-Turing machine, with cleanup
+#
+# Instruction # 0  1  2  3  4  5  6  7  8  9  10  11  12  13  14
+# Instruction   J1 P  R  J  P  L  J  J1 P  L  J   P   N   J   H 
+# Jump-to #     4        7        7  11       0           14  
+# 
+test ptbb-1.1 {} -body {
+    set tape [::automaton::Tape new \
+        -values {0 1} \
+        -blank 0 \
+        -start 4 \
+        -endmarkers {< >} \
+        -fill 8 \
+        ]
+    set program [::automaton::Tape new \
+        -values {E G G0 G1 H J J0 J1 L N P R} \
+        -start 0 \
+        -endmarkers {< >} \
+        {J1 4} P R {J 7} P L {J 7} {J1 11} P L {J 0} P N {J 14} L {J0 19} E R {J1 16} H]
+    oo::objdefine $program export variable
+    $program variable data head
+    while 1 {
+        set p [$program get]
+        log::log d [format {%-2s: %s} $head $p]
+        switch [lindex $p 0] {
+            H { break }
+            P { $tape set 1 ; $program R }
+            E { $tape erase ; $program R }
+            L - R { $tape $p ; $program R }
+            N { $program R }
+            G { $tape J [lindex $p 1] ; $program R }
+            G0 { if {[$tape get] eq 0} {$tape J [lindex $p 1]} {$program R}}
+            G1 { if {[$tape get] eq 1} {$tape J [lindex $p 1]} {$program R}}
+            J { $program J [lindex $p 1]}
+            J0 { if {[$tape get] eq 0} {$program J [lindex $p 1]} {$program R}}
+            J1 { if {[$tape get] eq 1} {$program J [lindex $p 1]} {$program R}}
+        }
+    }
+    unset data head
+    oo::objdefine $tape export variable
+    $tape variable data head
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $program destroy
+    log::lvSuppressLE i 1
+} -result {{< 0 0 0 0 0 0 0 0 >} 7}
+
+# Post-Turing machine to multiply two values
+#
+test ptbb-1.2 {} -body {
+    set tape [::automaton::Tape new \
+        -values {0 1} \
+        -blank 0 \
+        -start 4 \
+        0 1 1 1 1 0 1 1 1 1 1 0 0]
+    set program [::automaton::Tape new \
+        -values {E H J J0 J1 L N P R} \
+        -start 0 \
+        -endmarkers {< >} \
+        {*}{
+            R
+            {J1 *-1}
+            R
+            {J1 *-1}
+            R
+            P
+            L
+            L
+            {J1 *-1}
+            L
+            {J1 *-1}
+            R
+            E
+            R
+            {J0 42}
+            R
+            {J1 *-1}
+            R
+            R
+            {J0 7}
+            E
+            R
+            {J1 *-1}
+            R
+            {J1 *-1}
+            P
+            L
+            {J1 *-1}
+            L
+            {J1 *-1}
+            P
+            {J0 19}
+            R
+            {J0 7}
+            L
+            {J1 *-1}
+            L
+            {J1 *-1}
+            R
+            E
+            R
+            {J0 42}
+            H
+        }]
+    oo::objdefine $program export variable
+    $program variable data head
+    log::lvSuppressLE i 0
+    while 1 {
+        set p [$program get]
+        log::log d [format {%-2s: %s} $head $p]
+        switch [lindex $p 0] {
+            H { break }
+            P { $tape set 1 ; $program R }
+            E { $tape erase ; $program R }
+            L - R { $tape $p ; $program R }
+            N { $program R }
+            J { $program J [lindex $p 1]}
+            J0 { if {[$tape get] eq 0} {$program J [lindex $p 1]} {$program R}}
+            J1 { if {[$tape get] eq 1} {$program J [lindex $p 1]} {$program R}}
+        }
+    }
+    unset data head
+    oo::objdefine $tape export variable
+    $tape variable data head
+    list $data $head
+} -cleanup {
+    unset data head
+    $tape destroy
+    $program destroy
+    log::lvSuppressLE i 1
+} -result {{0 0 0 0 0 0 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 1 0} 25}
 
 cleanupTests ; return

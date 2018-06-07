@@ -11,8 +11,6 @@ namespace import ::tcltest::*
 package require pda
 package require string::token
 
-source ~/code/tcldocs/test/snippets.tcl
-
 dict set δ (q0,ε,S) {qe {}}
 dict set δ (q0,0,S) {q0 Z}
 dict set δ (q0,0,Z) {q0 {Z Z}}
@@ -253,7 +251,15 @@ test pda-2.2 {} -constraints {} -setup {
         emit enter S
     }]
     $slave source pdaslave.tcl
-    set code [lindex $snippets 0]
+    set code {set fp [open "D:\\RWTH\\Mini thesis\\EclipseTCL\\TCL trial\\excelv1.csv" r]
+set secondColumnData {}
+while {[gets $fp line]>=0} {
+    if {[llength $line]>0} {
+        lappend secondColumnData [lindex [split $line ","] 1]
+    }
+}
+close $fp 
+puts $secondColumnData}
     set tokens [::string::token text $lex $code]
     M read [lmap token $tokens {lassign $token sym beg end ; list $sym [string range $code $beg $end]}] $slave
     lappend res [$slave eval emit]

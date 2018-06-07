@@ -123,7 +123,7 @@ oo::class create ::pda::PDA {
 
     method Each {{token {}}} {
         if {$token eq {}} {
-            set token [$input read]
+            set token [$input get]
         }
         dict with tuple {}
         set current ([$state get],[lindex $token 0],[$stack top])
@@ -177,7 +177,7 @@ oo::class create ::pda::PDAWithSlave {
 
     method Each {{token {}}} {
         if {$token eq {}} {
-            set token [$input read]
+            set token [$input get]
         }
         $slave fields $token
         try {
