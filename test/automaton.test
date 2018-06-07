@@ -577,6 +577,21 @@ test ptbb-1.1 {} -body {
 
 # Post-Turing machine to multiply two values
 #
+proc fixJumps items {
+    set map {}
+    set code {}
+    set n 0
+    foreach item $items {
+        if {[string match *: $item]} {
+            lappend map [string trimright $item :] $n
+        } else {
+            lappend code $item
+            incr n
+        }
+    }
+    string map $map $code
+}
+
 test ptbb-1.2 {} -body {
     set tape [::automaton::Tape new \
         -values {0 1} \
@@ -587,66 +602,39 @@ test ptbb-1.2 {} -body {
         -values {E H J J0 J1 L N P R} \
         -start 0 \
         -endmarkers {< >} \
-        {*}{
-            R
-            {J1 *-1}
-            R
-            {J1 *-1}
-            R
-            P
+        {*}[fixJumps {
+            R {J1 *-1} R {J1 *-1} R P
             L
-            L
-            {J1 *-1}
-            L
-            {J1 *-1}
-            R
+   a_loop:  L {J1 *-1} L {J1 *-1} R
             E
-            R
-            {J0 42}
-            R
-            {J1 *-1}
-            R
-            R
-            {J0 7}
+            R {J0 done}
+            R {J1 *-1} R
+   b_loop:  R
+            {J0 a_loop}
             E
-            R
-            {J1 *-1}
-            R
-            {J1 *-1}
+            R {J1 *-1} R {J1 *-1}
             P
-            L
-            {J1 *-1}
-            L
-            {J1 *-1}
-            P
-            {J0 19}
+            L {J1 *-1} L {J1 *-1} P
+            {J1 b_loop}
             R
-            {J0 7}
-            L
-            {J1 *-1}
-            L
-            {J1 *-1}
-            R
+            {J0 a_loop}
             E
-            R
-            {J0 42}
-            H
-        }]
+   done:    H
+        }]]
     oo::objdefine $program export variable
     $program variable data head
-    log::lvSuppressLE i 0
     while 1 {
         set p [$program get]
         log::log d [format {%-2s: %s} $head $p]
         switch [lindex $p 0] {
-            H { break }
-            P { $tape set 1 ; $program R }
             E { $tape erase ; $program R }
+            H { break }
+            J { $program J [lindex $p 1]}
+            J0 { if {[$tape get] eq 0} {$program J [lindex $p 1]} {$program R} }
+            J1 { if {[$tape get] eq 1} {$program J [lindex $p 1]} {$program R} }
             L - R { $tape $p ; $program R }
             N { $program R }
-            J { $program J [lindex $p 1]}
-            J0 { if {[$tape get] eq 0} {$program J [lindex $p 1]} {$program R}}
-            J1 { if {[$tape get] eq 1} {$program J [lindex $p 1]} {$program R}}
+            P { $tape set 1 ; $program R }
         }
     }
     unset data head
@@ -658,6 +646,6 @@ test ptbb-1.2 {} -body {
     $tape destroy
     $program destroy
     log::lvSuppressLE i 1
-} -result {{0 0 0 0 0 0 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 1 0} 25}
+} -result {{0 0 0 0 0 0 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 1} 5}
 
 cleanupTests ; return
