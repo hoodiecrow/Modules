@@ -3,7 +3,7 @@ machine structure
 one or more heads and tapes, q
 
 head structure
-tape, position, writable, jumpable, moveleft, moveright, alphabet, blank, leftmarker, rightmarker
+tape, alphabet, position, options (readonly, sequential, leftward, rightward, blank, leftedge, rightedge)
 
 stack operations (on stack tape head)
 
@@ -19,17 +19,17 @@ get id a|A
     (else reset switches to init)
 
 left id
-    if moveleft move left
+    if leftward move left
     
 right id
-    if moveright move right
+    if rightward move right
 
 set id addr
-    error if not jumpable
+    error if sequential
     move head to addr
 
 put id idx|blank
-    error if not writable
+    error if readonly
     error if idx is not in alphabet
     print alphabet(idx) | erase
 
