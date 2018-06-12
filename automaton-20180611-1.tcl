@@ -4,154 +4,204 @@ namespace eval automaton {
     variable tapeid
 }
 
-oo::class create ::automaton::NFA {
-    variable states begin acceptStates transitions head next options
+oo::object create ::automaton::Reader
+oo::objdefine ::automaton::Reader {
+    method empty? str {expr {[llength $str] <= 0}}
+    method get str {lindex $str 0}
+    method rest str {lrange $str 1 end}
+}
+
+oo::object create ::automaton::Stack
+oo::objdefine ::automaton::Stack {
+    method pop varName {upvar 1 $varName stack ; set stack [lassign $stack A] ; return $A}
+    method push {varName values} {upvar 1 $varName stack ; set stack [concat $values $stack] ; return}
+}
+
+oo::class create ::automaton::FSM {
+    variable options transitions states alphabet
     constructor args {
-        array set options {
-            -epsilon 0
-        }
-        set args [my SetOptions {*}$args]
-        lassign $args states begin acceptStates transitions
-        if {$begin ni $states} {
-            return -code error [format {illegal starting state: %s} $begin]
-        }
-        my CheckAcceptStates
+        my AssignArgs $args options transitions
+        set states [lsort -unique [lmap tuple $transitions {lindex $tuple 0}]]
+        # TODO not actually used
+        # TODO remove ε from alphabet
+        set alphabet [lsort -unique [lmap tuple $transitions {lindex $tuple 1}]]
     }
 
-    method SetOptions args {
-        while {[string match -* [lindex $args 0]]} {
-            if {[lindex $args 0] eq "--"} {
-                set args [lrange $args 1 end]
+    forward Reader ::automaton::Reader
+
+    method AssignArgs {_args optVarName args} {
+        upvar 1 $optVarName optvar
+        while {[string match -* [lindex $_args 0]]} {
+            if {[lindex $_args 0] eq "--"} {
+                set _args [lrange $_args 1 end]
                 break
             }
-            set args [lassign $args opt options($opt)]
+            set _args [lassign $_args opt optvar($opt)]
         }
-        return $args
+        return [lassign $_args {*}$args]
     }
 
-    method CheckAcceptStates {} {
-        set illegal {}
-        foreach s $acceptStates {
-            if {$s ni $states} {
-                lappend illegal $s
-            }
-        }
-        if {[llength $illegal] > 0} {
-            return -code error [format {illegal accepting state(s) (%s)} [join $illegal {, }]]
-        }
-    }
-
-    method accept h {
-        set head $h
-        $head configure -readonly 1 -sequential 1 -leftward 0
-        set ts {}
-        # TODO MoM output based on begin
-        if {$options(-epsilon)} {
-            lappend ts {*}[my matchTransition $begin ε]
-            # TODO MeM output based on begin/ε
-        }
-        set a [$head get]
-        if {$a eq {}} {
-            return [expr {$begin in $acceptStates}]
-        }
-        lappend ts {*}[my matchTransition $begin $a]
-        log::log d \$ts=$ts 
-        # TODO MeM output based on begin/$a
-        set h0 [oo::copy $head]
-        $head right
-        foreach p [lsort -unique [lmap item $ts {lindex $item end}]] {
-            set args {}
-            lappend args {*}[array get options]
-            lappend args $states $p $acceptStates
-            set m [[self class] new {*}$args]
-            if {$p eq "ε"} {
-                m accept $h0
+    method accept {state symbols acceptStates} {
+        log::log d [info level 0] 
+        if no {
+            # TODO MoM output based on $state
+            if {[my Reader empty? $symbols]} {
+                return [expr {$state in $acceptStates}]
             } else {
-                m accept $head
+                set results {}
+                foreach trans [my matchTransition $state ε] {
+                    log::log d ε-\$trans=$trans
+                    lappend results [my accept [lindex $trans end] $symbols]
+                }
+                set a [my Reader get $symbols]
+                # TODO MeM output based on $state/$a
+                foreach trans [my matchTransition $state $a] {
+                    log::log d \$trans=$trans
+                    lappend results [my accept [lindex $trans end] [my Reader rest $symbols]]
+                }
+                return [expr {1 in $results}]
             }
-            lappend next $m
+        } else {
+            # TODO MoM output based on $state
+            set ss1 [list $state]
+            set ss2 $ss1
+            while {![my Reader empty? $symbols]} {
+                log::log d statesets=[list $ss1]/[list $ss2]
+                foreach s $ss1 {
+                    foreach trans [my matchTransition $s ε] {
+                        log::log d ε-\$trans=$trans
+                        lappend ss1 [lindex $trans end]
+                    }
+                }
+                set a [my Reader get $symbols]
+                # TODO MeM output based on $state/$a
+                set symbols [my Reader rest $symbols]
+                set ss2 {}
+                foreach s $ss1 {
+                    foreach trans [my matchTransition $s $a] {
+                        log::log d \$trans=$trans
+                        lappend ss2 [lindex $trans end]
+                    }
+                }
+                if {[llength $ss2] <= 0} {
+                    return -code error [format {no transition for ((%s),%s)} [join $ss1 ,] $a]
+                }
+                set ss1 $ss2
+            }
+            log::log d \$ss2=$ss2
+            foreach s $ss2 {
+                if {$s in $acceptStates} {
+                    return 1
+                }
+            }
+            return 0
         }
     }
 
     method matchTransition args {
-        log::log d [info level 0] 
         set res $transitions
-        log::log d \$res=$res 
         for {set i 0} {$i < [llength $args]} {incr i} {
-            set arg [lindex $args $i]
-            set res [lsearch -all -inline -index $i $res $arg]
-            log::log d \$res=$res 
+            set res [lsearch -all -inline -index $i $res [lindex $args $i]]
         }
         return $res
     }
 
 }
 
-# no ε-moves: ε-NFA for that
-oo::class create ::automaton::DFA {
-    variable states begin acceptStates transitions head next current options
+oo::class create ::automaton::PDA {
+    variable options transitions states alphabet stackAlphabet
     constructor args {
-        array set options {
-        }
-        set args [my SetOptions {*}$args]
-        lassign $args states begin acceptStates transitions
-        if {$begin ni $states} {
-            return -code error [format {illegal starting state: %s} $begin]
-        }
-        my CheckAcceptStates
-        set current $begin
+        my AssignArgs $args options transitions
+        set states [lsort -unique [lmap tuple $transitions {lindex $tuple 0}]]
+        # TODO not actually used
+        # TODO remove ε from alphabet
+        set alphabet [lsort -unique [lmap tuple $transitions {lindex $tuple 1}]]
+        # TODO not actually used
+        set stackAlphabet [lsort -unique [lmap tuple $transitions {lindex $tuple 2}]]
     }
 
-    method SetOptions args {
-        while {[string match -* [lindex $args 0]]} {
-            if {[lindex $args 0] eq "--"} {
-                set args [lrange $args 1 end]
+    forward Reader ::automaton::Reader
+    forward Stack ::automaton::Stack
+
+    method AssignArgs {_args optVarName args} {
+        upvar 1 $optVarName optvar
+        while {[string match -* [lindex $_args 0]]} {
+            if {[lindex $_args 0] eq "--"} {
+                set _args [lrange $_args 1 end]
                 break
             }
-            set args [lassign $args opt options($opt)]
+            set _args [lassign $_args opt optvar($opt)]
         }
-        return $args
+        return [lassign $_args {*}$args]
     }
 
-    method CheckAcceptStates {} {
-        set illegal {}
-        foreach s $acceptStates {
-            if {$s ni $states} {
-                lappend illegal $s
+    method accept {Q symbols stack acceptStates} {
+        set id [expr [clock microseconds]%1000]
+        log::log d $id:[info level 0] 
+        # if no transitions are made
+        set T {}
+        while 1 {
+            # TODO MoM output based on $Q
+            set symbols [lassign $symbols a]
+            # TODO MeM output based on $state/$a
+            if no {
+                if {[llength $stack] eq 1} {
+                    lassign $stack A
+                } else {
+                    set stack [lassign $stack A]
+                }
+            }
+            set stack [lassign $stack A]
+            if no {
+                if {$A eq {}} {
+                    set A ε
+                }
+            }
+            log::log d "$id:\$Q=$Q, \$a=$a, \$A=$A, \$stack=$stack"
+            foreach q $Q {
+                set tuples [lsearch -all -inline -index 0 $transitions $q]
+                set tuples [lsearch -all -inline -index 1 $tuples ε]
+                set tuples [lsearch -all -inline -index 2 $tuples $A]
+                foreach tuple $tuples {
+                    lappend Q [lindex $tuple 3]
+                }
+            }
+            set Q [lsort -unique $Q]
+            log::log d $id:\$Q=$Q
+            if {$a eq {}} {
+                foreach q $Q {
+                    if {$q in $acceptStates} {
+                        return 1
+                    }
+                }
+                return 0
+            }
+            set S {}
+            foreach q $Q {
+                set tuples [lsearch -all -inline -index 0 $transitions $q]
+                set tuples [lsearch -all -inline -index 1 $tuples $a]
+                lappend S {*}[lsearch -all -inline -index 2 $tuples $A]
+            }
+            log::log d $id:\$S=$S
+            if {[llength $S] <= 0} {
+                return 0
+                return -code error [format {no transition for ((%s),%s,%s)} [join $Q ,] $a $A]
+            }
+            set T {}
+            foreach s $S {
+                lappend T [my accept [lindex $s 3] $symbols \
+                    [concat {*}[string map {ε {}} [lrange $s 4 end]] $stack] \
+                    $acceptStates]
             }
         }
-        if {[llength $illegal] > 0} {
-            return -code error [format {illegal accepting state(s) (%s)} [join $illegal {, }]]
-        }
-    }
-
-    method accept h {
-        set head $h
-        $head configure -readonly 1 -sequential 1 -leftward 0 -rightinf 0
-        # TODO MoM output based on current
-        set a [$head get]
-        if {$a eq {}} {
-            set final $current
-            set current $begin
-            return [expr {$final in $acceptStates}]
-        }
-        # TODO MeM output based on $current/$a
-        $head right
-        set current [lindex [my matchTransition $current $a] 0 end]
-        log::log d \$current=$current 
-        return [my accept $head]
+        return [expr {1 in $T}]
     }
 
     method matchTransition args {
-        log::log d [info level 0] 
         set res $transitions
-        log::log d \$res=$res 
         for {set i 0} {$i < [llength $args]} {incr i} {
-            set arg [lindex $args $i]
-            set res [lsearch -all -inline -index $i $res $arg]
-            log::log d \$res=$res 
+            set res [lsearch -all -inline -index $i $res [lindex $args $i]]
         }
-        # TODO error if more than one match
         return $res
     }
 
@@ -499,7 +549,7 @@ test tape-1.15 {} -body {
 } -result {{< a b c _ _ _ _ >} 8}
 
 test dfa-1.0 {} -body {
-    ::automaton::DFA create M {s0 s1 s2} s0 {s0} {
+    ::automaton::FSM create M {
         {s0 0 s0}
         {s0 1 s1}
         {s1 0 s2}
@@ -507,15 +557,14 @@ test dfa-1.0 {} -body {
         {s2 0 s1}
         {s2 1 s2}
     }
-    M accept [::automaton::Head new {} {0 1}]
+    M accept s0 {} {s0}
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
 } -result 1
 
-
 test dfa-1.1 {} -body {
-    ::automaton::DFA create M {s0 s1 s2} s0 {s0} {
+    ::automaton::FSM create M {
         {s0 0 s0}
         {s0 1 s1}
         {s1 0 s2}
@@ -524,19 +573,84 @@ test dfa-1.1 {} -body {
         {s2 1 s2}
     }
     set res {}
-    lappend res [M accept [::automaton::Head new {1} {0 1}]]
-    lappend res [M accept [::automaton::Head new {0 1} {0 1}]]
-    lappend res [M accept [::automaton::Head new {1 1} {0 1}]]
-    lappend res [M accept [::automaton::Head new {0 0 1} {0 1}]]
-    lappend res [M accept [::automaton::Head new {1 0 1} {0 1}]]
-    lappend res [M accept [::automaton::Head new {0 1 1} {0 1}]]
-    lappend res [M accept [::automaton::Head new {1 1 1} {0 1}]]
+    lappend res [M accept s0 {1} {s0}]
+    lappend res [M accept s0 {0 1} {s0}]
+    lappend res [M accept s0 {1 1} {s0}]
+    lappend res [M accept s0 {0 0 1} {s0}]
+    lappend res [M accept s0 {1 0 1} {s0}]
+    lappend res [M accept s0 {0 1 1} {s0}]
+    lappend res [M accept s0 {1 1 1} {s0}]
     set res
 } -cleanup {
     M destroy
     log::lvSuppressLE i 1
 } -result {0 0 1 0 0 1 0}
 
+test nfa-1.0 {} -body {
+    ::automaton::FSM create M {
+        {s0 0 s0}
+        {s0 1 s0}
+        {s0 1 s1}
+    }
+    set res {}
+    lappend res [M accept s0 {1} {s1}]
+    lappend res [M accept s0 {0} {s1}]
+    lappend res [M accept s0 {1 1} {s1}]
+    lappend res [M accept s0 {1 0} {s1}]
+    lappend res [M accept s0 {0 1} {s1}]
+    lappend res [M accept s0 {0 0} {s1}]
+    set res
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {1 0 1 0 1 0}
+
+test nfa-1.1 {find even number of ones/zeros} -body {
+    ::automaton::FSM create M {
+        {s0 ε s1}
+        {s0 ε s3}
+        {s1 0 s2}
+        {s1 1 s1}
+        {s2 0 s1}
+        {s2 1 s2}
+        {s3 0 s3}
+        {s3 1 s4}
+        {s4 0 s4}
+        {s4 1 s3}
+    }
+    set res {}
+    lappend res [M accept s0 {1 1} {s1 s3}]
+    lappend res [M accept s0 {1 0} {s1 s3}]
+    lappend res [M accept s0 {0 1} {s1 s3}]
+    lappend res [M accept s0 {0 0} {s1 s3}]
+    lappend res [M accept s0 {1 0 0 1 1 1} {s1 s3}]
+    lappend res [M accept s0 {1 0 0 1 1 0} {s1 s3}]
+    set res
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {1 0 0 1 1 0}
+
+test pda-1.1 {} -body {
+    ::automaton::PDA create M {
+        {p 0 Z p A Z}
+        {p 0 A p A A}
+        {p ε Z q Z}
+        {p ε A q A}
+        {q 1 A q ε}
+        {q ε Z r Z}
+    }
+    set res {}
+    log::lvSuppressLE i 0
+    lappend res [M accept {p} {0 1} {Z} {r}]
+    log::lvSuppressLE i 1
+    lappend res [M accept {p} {0 0 0 1 1 1} {Z} {r}]
+    lappend res [M accept {p} {0 0 0 1 1} {Z} {r}]
+    set res
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {1 1 0}
 
 cleanupTests
 
