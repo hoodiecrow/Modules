@@ -1,6 +1,148 @@
 
 namespace eval automaton {}
 
+oo::class create ::automaton::Utils {
+    variable transitions output out
+
+    method AssignArgs {arglist optVarName args} {
+        upvar 1 $optVarName optvar
+        foreach arg $args {
+            upvar 1 $arg $arg
+        }
+        while {[string match -* [lindex $arglist 0]]} {
+            if {[lindex $arglist 0] eq "--"} {
+                set arglist [lrange $arglist 1 end]
+                break
+            }
+            set arglist [lassign $arglist opt optvar($opt)]
+        }
+        return [lassign $arglist {*}$args]
+    }
+
+    method output {} {set out}
+
+    method OutputByKey k {
+        if {[dict exists $output $k]} {
+            lappend out [dict get $output $k]
+        }
+    }
+
+    method OutputByID args {
+        set k [join [lmap arg $args {lindex $arg 0}] ,]
+        if {[string first , $k] < 0} {
+            set k $k,
+        }
+        my OutputByKey $k
+    }
+
+    method OutputState {Q args} {
+        log::log d [format {stateset=((%s),%s)} \
+            $Q \
+            [join [lmap arg $args {lindex $arg 0}] ,]]
+        if {$output ne {}} {
+            foreach q $Q {
+                my OutputByKey $q
+                my OutputByID $q {*}$args
+            }
+        }
+    }
+
+    method Accepting {Q a acceptStates} {
+        foreach q $Q {
+            if {$q in $acceptStates} {
+                if {$output ne {}} {
+                    my OutputByKey $q
+                    my OutputByID $q {*}$a
+                }
+                return 1
+            }
+        }
+        return 0
+    }
+
+    method ε-moves {Q idx {A {}}} {
+        foreach q $Q {
+            set tuples [my MatchTransition $q ε]
+            if {$A ne {}} {
+                set tuples [lsearch -all -inline -index 2 $tuples $A]
+            }
+            foreach tuple $tuples {
+                lappend Q [lindex $tuple $idx]
+            }
+        }
+        return [lsort -unique $Q]
+    }
+
+    method MatchTransition {Q args} {
+        log::log d [info level 0] 
+        # get all tuples that match any of the state symbols
+        set res [lsearch -regexp -all -inline -index 0 $transitions [join $Q |]]
+        log::log d \$res=$res 
+        # get all tuples that match input symbols/stack symbols etc
+        for {set i 0} {$i < [llength $args]} {incr i} {
+            set res [lsearch -all -inline -index $i+1 $res [lindex $args $i]]
+        }
+        log::log d \$res=$res 
+        return $res
+    }
+
+}
+
+oo::class create ::automaton::FSM {
+    mixin ::automaton::Utils
+
+    variable options transitions output out
+
+    constructor args {
+        my AssignArgs $args options transitions output out
+    }
+
+    method accept {Q symbols acceptStates} {
+        while {[llength $symbols] > 0} {
+            my OutputState $Q $symbols
+            set symbols [lassign $symbols a]
+            set Q [my ε-moves $Q 2]
+            set S [my MatchTransition $Q $a]
+            set Q [lsort -unique [lmap s $S {lindex $s 2}]]
+        }
+        return [my Accepting $Q {} $acceptStates]
+    }
+
+}
+
+oo::class create ::automaton::PDA {
+    mixin ::automaton::Utils
+
+    variable options transitions output out
+
+    constructor args {
+        my AssignArgs $args options transitions output out
+    }
+
+    method accept {q symbols stack acceptStates} {
+        # must be recursive because of stack
+        my OutputState [list $q] $symbols $stack
+        set symbols [lassign $symbols a]
+        set stack [lassign $stack A]
+        set Q [my ε-moves [list $q] 3 $A]
+        if {$a eq {}} {
+            return [my Accepting $Q [list $a $A] $acceptStates]
+        }
+        set S [my MatchTransition $Q $a $A]
+        foreach s $S {
+            if {[lindex $s end 0] eq "ε"} {
+                set s [lrange $s 0 3]
+            }
+            set α [lassign $s - - - p]
+            if {[my accept $p $symbols [concat ${α} $stack] $acceptStates]} {
+                return 1
+            }
+        }
+        return 0
+    }
+
+}
+
 oo::class create ::automaton::Base {
     variable data options head values
 
