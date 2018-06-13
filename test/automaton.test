@@ -10,11 +10,6 @@ namespace import ::tcltest::*
 
 package require automaton
 
-
-# TODO remove this
-source -encoding utf-8 ../automaton-20180613-1.tcl
-
-
 test dfa-1.0 {} -body {
     ::automaton::FSM create M {
         {s0 0 s0}

@@ -35,24 +35,25 @@ oo::class create ::automaton::Utils {
         my OutputByKey $k
     }
 
-    method OutputState {Q args} {
+    method OutputState {states args} {
         log::log d [format {stateset=((%s),%s)} \
-            $Q \
+            $states \
             [join [lmap arg $args {lindex $arg 0}] ,]]
         if {$output ne {}} {
-            foreach q $Q {
-                my OutputByKey $q
-                my OutputByID $q {*}$args
+            foreach state $states {
+                my OutputByKey $state
+                my OutputByID $state {*}$args
             }
         }
     }
 
-    method Accepting {Q a acceptStates} {
-        foreach q $Q {
-            if {$q in $acceptStates} {
+    method Accepting {acceptStates states args} {
+        # only the first accepted state is reported
+        foreach state $states {
+            if {$state in $acceptStates} {
                 if {$output ne {}} {
-                    my OutputByKey $q
-                    my OutputByID $q {*}$a
+                    my OutputByKey $state
+                    my OutputByID $state {*}$args
                 }
                 return 1
             }
@@ -60,30 +61,31 @@ oo::class create ::automaton::Utils {
         return 0
     }
 
-    method ε-moves {Q idx {A {}}} {
-        foreach q $Q {
-            set tuples [my MatchTransition $q ε]
-            if {$A ne {}} {
+    method ε-moves {states idx {stack {}}} {
+        set A [lindex $stack 0]
+        foreach state $states {
+            set tuples [my MatchTransition $state ε]
+            if {$stack ne {}} {
                 set tuples [lsearch -all -inline -index 2 $tuples $A]
             }
             foreach tuple $tuples {
-                lappend Q [lindex $tuple $idx]
+                lappend states [lindex $tuple $idx]
             }
         }
-        return [lsort -unique $Q]
+        return [lsort -unique $states]
     }
 
-    method MatchTransition {Q args} {
+    method MatchTransition {states args} {
         log::log d [info level 0] 
         # get all tuples that match any of the state symbols
-        set res [lsearch -regexp -all -inline -index 0 $transitions [join $Q |]]
-        log::log d \$res=$res 
+        set tuples [lsearch -regexp -all -inline -index 0 $transitions [join $states |]]
+        log::log d \$tuples=$tuples 
         # get all tuples that match input symbols/stack symbols etc
         for {set i 0} {$i < [llength $args]} {incr i} {
-            set res [lsearch -all -inline -index $i+1 $res [lindex $args $i]]
+            set tuples [lsearch -all -inline -index $i+1 $tuples [lindex $args $i 0]]
         }
-        log::log d \$res=$res 
-        return $res
+        log::log d \$tuples=$tuples 
+        return $tuples
     }
 
 }
@@ -97,15 +99,15 @@ oo::class create ::automaton::FSM {
         my AssignArgs $args options transitions output out
     }
 
-    method accept {Q symbols acceptStates} {
+    method accept {states symbols acceptStates} {
         while {[llength $symbols] > 0} {
-            my OutputState $Q $symbols
-            set symbols [lassign $symbols a]
-            set Q [my ε-moves $Q 2]
-            set S [my MatchTransition $Q $a]
-            set Q [lsort -unique [lmap s $S {lindex $s 2}]]
+            my OutputState $states $symbols
+            set states [my ε-moves $states 2]
+            set tuples [my MatchTransition $states $symbols]
+            set states [lsort -unique [lmap tuple $tuples {lindex $tuple 2}]]
+            set symbols [lrange $symbols 1 end]
         }
-        return [my Accepting $Q {} $acceptStates]
+        return [my Accepting $acceptStates $states $symbols]
     }
 
 }
@@ -119,21 +121,21 @@ oo::class create ::automaton::PDA {
         my AssignArgs $args options transitions output out
     }
 
-    method accept {q symbols stack acceptStates} {
+    method accept {states symbols stack acceptStates} {
         # must be recursive because of stack
-        my OutputState [list $q] $symbols $stack
-        set symbols [lassign $symbols a]
-        set stack [lassign $stack A]
-        set Q [my ε-moves [list $q] 3 $A]
-        if {$a eq {}} {
-            return [my Accepting $Q [list $a $A] $acceptStates]
+        my OutputState $states $symbols $stack
+        set states [my ε-moves $states 3 $stack]
+        if {[llength $symbols] eq 0} {
+            return [my Accepting $acceptStates $states $symbols $stack]
         }
-        set S [my MatchTransition $Q $a $A]
-        foreach s $S {
-            if {[lindex $s end 0] eq "ε"} {
-                set s [lrange $s 0 3]
+        set tuples [my MatchTransition $states $symbols $stack]
+        set symbols [lrange $symbols 1 end]
+        set stack [lrange $stack 1 end]
+        foreach tuple $tuples {
+            if {[lindex $tuple end 0] eq "ε"} {
+                set tuple [lrange $tuple 0 3]
             }
-            set α [lassign $s - - - p]
+            set α [lassign $tuple - - - p]
             if {[my accept $p $symbols [concat ${α} $stack] $acceptStates]} {
                 return 1
             }
