@@ -21,39 +21,47 @@ oo::class create ::automaton::Utils {
 
     method output {} {set out}
 
-    method OutputByKey k {
+    method OutputByKey {k args} {
+        log::log d [info level 0] 
         if {[dict exists $output $k]} {
-            lappend out [dict get $output $k]
+            lappend out [concat [dict get $output $k] $args]
         }
     }
 
-    method OutputByID args {
-        set k [join [lmap arg $args {lindex $arg 0}] ,]
-        if {[string first , $k] < 0} {
-            set k $k,
+    method OutputByID {state token args} {
+        # Input symbols is always the first item in args, and the first item in
+        # symbols has the input symbol to be used for the transition. If the
+        # first item is a list, the tail of this list is to be appended to the
+        # output. Only the first element of the item is the input symbol.
+        set tail [lassign $token symbol]
+        set k $state,$symbol
+        if {[llength $args] > 0} {
+            append k , [join [lmap arg $args {lindex $arg 0}] ,]
         }
-        my OutputByKey $k
+        my OutputByKey $k {*}$tail
     }
 
-    method OutputState {states args} {
+    method OutputState {states symbols args} {
+        set symbols [lassign $symbols token]
         log::log d [format {stateset=((%s),%s)} \
             $states \
-            [join [lmap arg $args {lindex $arg 0}] ,]]
+            [join [linsert [lmap arg $args {lindex $arg 0}] 0 [lindex $token 0]] ,]]
         if {$output ne {}} {
             foreach state $states {
                 my OutputByKey $state
-                my OutputByID $state {*}$args
+                my OutputByID $state $token {*}$args
             }
         }
     }
 
-    method Accepting {acceptStates states args} {
+    method Accepting {acceptStates states symbols args} {
         # only the first accepted state is reported
+        set symbols [lassign $symbols token]
         foreach state $states {
             if {$state in $acceptStates} {
                 if {$output ne {}} {
                     my OutputByKey $state
-                    my OutputByID $state {*}$args
+                    my OutputByID $state $token {*}$args
                 }
                 return 1
             }
@@ -80,9 +88,13 @@ oo::class create ::automaton::Utils {
         # get all tuples that match any of the state symbols
         set tuples [lsearch -regexp -all -inline -index 0 $transitions [join $states |]]
         log::log d \$tuples=$tuples 
+        # make the current input symbol atomic
+        lset args 0 [lindex $args 0 0]
         # get all tuples that match input symbols/stack symbols etc
-        for {set i 0} {$i < [llength $args]} {incr i} {
-            set tuples [lsearch -all -inline -index $i+1 $tuples [lindex $args $i 0]]
+        if {[llength $args] > 0} {
+            for {set i 0} {$i < [llength $args]} {incr i} {
+                set tuples [lsearch -all -inline -index $i+1 $tuples [lindex $args $i 0]]
+            }
         }
         log::log d \$tuples=$tuples 
         return $tuples

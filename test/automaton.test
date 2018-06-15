@@ -194,6 +194,31 @@ test pda-1.2 {} -body {
     log::lvSuppressLE i 1
 } -result {pee0Z pee0A pee0A pee1A que1A que1A done}
 
+test pda-1.3 {} -body {
+    ::automaton::PDA create M {
+        {p 0 Z p A Z}
+        {p 0 A p A A}
+        {p ε Z q Z}
+        {p ε A q A}
+        {q 1 A q ε}
+        {q ε Z r Z}
+    } {
+        p,0,A pee0A
+        p,0,Z pee0Z
+        p,1,A pee1A
+        p,1,Z pee1Z
+        q,0,A que0A
+        q,0,Z que0Z
+        q,1,A que1A
+        r,,Z  done
+    }
+    M accept {p} {{0 foo} 0 0 {1 bar baz} 1 1} {Z} {r}
+    M output
+} -cleanup {
+    M destroy
+    log::lvSuppressLE i 1
+} -result {{pee0Z foo} pee0A pee0A {pee1A bar baz} que1A que1A done}
+
 test tape-1.0 {} -body {
     ::automaton::Tape create foo a b c
     oo::objdefine foo export variable
