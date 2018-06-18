@@ -102,6 +102,92 @@ oo::class create ::automaton::Utils {
 
 }
 
+oo::class create ::automaton::FSM2Moore {
+    variable options transitions moves acceptStates output n tracks activeStates
+
+    constructor args {
+        my AssignArgs $args options transitions output
+        set acceptStates {}
+        foreach transition $transitions {
+            lassign $transition from edge to
+            if {[regexp {\(([^/\s]+)\)} $from -> acceptState]} {
+                lappend acceptStates $acceptState
+            }
+            regexp {(\(?([^/\s]+)\)?)\s*/\s*(.*)} $from -> from output($from)
+            regexp {([^/\s]+)\s*/\s*(.*)} $edge -> edge output($edge)
+            lappend move($from,$edge) $to
+        }
+        set n 0
+        set tracks {}
+        set activeStates {}
+    }
+
+    method AssignArgs {arglist optVarName args} {
+        upvar 1 $optVarName optvar
+        foreach arg $args {
+            upvar 1 $arg $arg
+        }
+        while {[string match -* [lindex $arglist 0]]} {
+            if {[lindex $arglist 0] eq "--"} {
+                set arglist [lrange $arglist 1 end]
+                break
+            }
+            set arglist [lassign $arglist opt optvar($opt)]
+        }
+        return [lassign $arglist {*}$args]
+    }
+
+    method AddTrack {n state} {
+        lassign [split $state /] state output
+        dict set tracks $n state [string trim $state]
+        dict lappend tracks $n output [string trim $output]
+    }
+
+    method ε-move data {
+        dict for {n data} $tracks {
+        }
+    }
+
+    method accept current {
+        lassign $current tracks symbols
+        while {[llength $symbols] > 0} {
+            set symbols [lassign $symbols symbol]
+            set new {}
+            for {set i 0} {$i < [llength $tracks]} {incr i} {
+                set track [lindex $tracks $i]
+                if {$track eq {}} {
+                    continue
+                }
+                set state [lindex $track end]
+                if {[info exists move($state,ε)]} {
+                    foreach to $move($state,ε) {
+                        lappend new [lreplace $track end end $to]
+                    }
+                }
+                lset tracks $i {}
+                if {[info exists move($state,$symbol)]} {
+                    foreach to $move($state,$symbol) {
+                        lappend new [linsert $track end $to]
+                    }
+                }
+            }
+            set tracks [lmap track [concat $tracks $new] {
+                if {$track eq {}} {
+                    continue
+                } else {
+                    set track
+                }
+            }
+        }
+        foreach track $tracks {
+            if {[lindex $track end] in $acceptStates} {
+                puts [lmap state $track {set output($state)}]
+            }
+        }
+    }
+
+}
+
 oo::class create ::automaton::FSM {
     mixin ::automaton::Utils
 
@@ -113,6 +199,8 @@ oo::class create ::automaton::FSM {
 
     method accept {states symbols acceptStates} {
         while {[llength $symbols] > 0} {
+            # TODO probably doesn't work correctly after all
+            # unfollowed states are left in the states list <- no they aren't
             my OutputState $states $symbols
             set states [my ε-moves $states 2]
             set tuples [my MatchTransition $states $symbols]
