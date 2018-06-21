@@ -3,7 +3,6 @@
 test*.txt
 l.*.test
 test/temp/*
-args.tcl
 
 # Windows image file caches
 Thumbs.db
