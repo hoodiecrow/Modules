@@ -3,6 +3,7 @@
 test*.txt
 l.*.test
 test/temp/*
+args.tcl
 
 # Windows image file caches
 Thumbs.db
@@ -47,4 +48,3 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
-args.tcl
