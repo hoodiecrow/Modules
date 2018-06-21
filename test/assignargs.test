@@ -1,0 +1,82 @@
+package require tcltest
+namespace import ::tcltest::*
+
+::tcltest::configure {*}$argv
+
+::tcltest::testConstraint skip 0
+::tcltest::testConstraint noskip 1
+
+::tcltest::loadTestedCommands
+
+package require assignargs
+
+array set options {}
+
+test args-1.0 {} -setup {AssignArgs create A} -body {
+    A assign {} {foo bar} [namespace which -variable options] a b
+    list $a $b
+} -cleanup {
+    A destroy
+    unset a b
+} -result {foo bar}
+
+test args-1.1 {} -setup {AssignArgs create A} -body {
+    A assign {-foo* {my SetValOption}} {foo bar} [namespace which -variable options] a b
+    list $a $b
+} -cleanup {
+    A destroy
+    unset a b
+} -result {foo bar}
+
+test args-1.2 {} -setup {AssignArgs create A} -body {
+    A assign {-foo* {my SetValOption}} {-bar x foo bar} [namespace which -variable options] a b
+} -cleanup {
+    A destroy
+} -result {unknown option "-bar"} -returnCodes error
+
+test args-1.3 {} -setup {AssignArgs create A} -body {
+    A assign {-foo* {my SetValOption -fooish}} {-foo x foo bar} [namespace which -variable options] a b
+    list [array get options] $a $b
+} -cleanup {
+    A destroy
+    unset a b
+    array unset options *
+} -result {{-fooish x} foo bar}
+
+test args-1.4 {} -setup {AssignArgs create A} -body {
+    A assign {-foo* {my SetValOption}} {-foo x foo bar} [namespace which -variable options] a b
+    list [array get options] $a $b
+} -cleanup {
+    A destroy
+    unset a b
+    array unset options *
+} -result {{-foo x} foo bar}
+
+test args-1.5 {} -setup {AssignArgs create A} -body {
+    A assign {-foo* {my SetValOption}} {-- -foo x foo bar} [namespace which -variable options] a b
+    list [array get options] $a $b
+} -cleanup {
+    A destroy
+    unset a b
+    array unset options *
+} -result {{} -foo x}
+
+test args-1.6 {} -setup {AssignArgs create A} -body {
+    A assign {default {my PrefixHandler {-foobar -fooish}}} {-fooi x foo bar} [namespace which -variable options] a b
+    list [array get options] $a $b
+} -cleanup {
+    A destroy
+    unset a b
+    array unset options *
+} -result {{-fooish x} foo bar}
+
+test args-1.7 {} -setup {AssignArgs create A} -body {
+    A assign {default {my PrefixHandler {-foobar -fooish}}} {-foob x foo bar} [namespace which -variable options] a b
+    list [array get options] $a $b
+} -cleanup {
+    A destroy
+    unset a b
+    array unset options *
+} -result {{-foobar x} foo bar}
+
+cleanupTests

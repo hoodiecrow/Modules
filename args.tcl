@@ -1,3 +1,8 @@
+
+
+return
+
+
 proc foo args {
     array set options {-bargle {} -bazout vampires -quxwoo 0}
     while {[llength $args]} {
