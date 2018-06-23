@@ -161,7 +161,7 @@ oo::class create PDA {
         }
     }
 
-    method Run {states symbols stack} {
+    method _Run {states symbols stack} {
         my MooreEnter $states
         if {[llength $symbols] <= 0} {
             return [expr {[llength [lintersect $states $accepting]] > 0}]
