@@ -12,19 +12,25 @@ interp alias {} ltail {} apply {list {lrange $list 1 end}}
 
 catch {BuildGraph destroy}
 oo::class create BuildGraph {
-    method BuildGraph transitions {
-        set graph [::struct::graph]
+    variable graph
+    method InsertNodes transitions {
+        foreach {from - to} $transitions {
+            lappend states $from $to
+        }
+        $graph node insert {*}[lsort -unique $states]
+    }
+    method InsertArcs transitions {
         foreach {from edge to} $transitions {
-            foreach state [list $from $to] {
-                if {![$graph node exists $state]} {
-                    $graph node insert $state
-                }
-            }
-            lassign [split $edge /] input output
             set arc [$graph arc insert $from $to]
+            lassign [split $edge /] input output
             $graph arc set $arc input $input
             $graph arc set $arc output $output
         }
+    }
+    method BuildGraph transitions {
+        set graph [::struct::graph]
+        my InsertNodes $transitions
+        my InsertArcs $transitions
         return $graph
     }
 }
@@ -257,7 +263,11 @@ PDA create P r {
 
 puts "PDA: [P accept p [split 000111 {}] [list Z]]"
 
+
 return
+
+
+
 if no {
 # PDA
     oo::class create _PDA {
