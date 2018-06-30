@@ -5,7 +5,15 @@ namespace eval tclook {
 
     foreach {ns color} {
         object wheat
+        object00 wheat
+        object01 wheat
+        object10 wheat
+        object11 wheat
         class lavender
+        class00 lavender
+        class01 lavender
+        class10 lavender
+        class11 lavender
         namespace DarkSeaGreen1
         method {lemon chiffon}
         command khaki1
@@ -13,9 +21,22 @@ namespace eval tclook {
         namespace eval $ns {}
         ttk::style configure $ns.TLabel -background $color
     }
+    foreach f {00 01 10 11} {
+        set font$f [font create]
+    }
+    set fontdict [font actual [ttk::style lookup TLabel -font]]
+    font configure $font00 {*}[dict merge $fontdict {-underline 1}]
+    font configure $font01 {*}$fontdict
+    font configure $font10 {*}[dict merge $fontdict {-slant italic -underline 1}]
+    font configure $font11 {*}[dict merge $fontdict {-slant italic}]
+    foreach type {object class} {
+        foreach f {00 01 10 11} {
+            ttk::style configure $type$f.TLabel -font [set font$f]
+        }
+    }
 
     bind wobjPopup <1> {::tclook::show [%W cget -text]}
-    foreach tag {classPopup mixinsPopup superclassesPopup} {
+    foreach tag {classPopup mixinsPopup superclassPopup} {
         bind $tag <1> {::tclook::_show class [%W cget -text]}
     }
     foreach tag {namespace command} {
@@ -48,7 +69,7 @@ proc ::tclook::_show {types name} {
                 [namespace current]::$type\::Pane $w $name
             } on ok f {
                 foreach ch [winfo children $f] {
-                    if {[winfo class $ch] eq "TLabel"} {
+                    if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
                         $ch config -style $type.TLabel
                     }
                 }
@@ -79,13 +100,13 @@ proc ::tclook::listSingle {w rowVarName type obj key args} {
     set k [ttk::label $w.k$row -text $key]
     set v [ttk::label $w.v$row -text $val]
     ::tclook::Bind $v $key
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
 }
 
 proc ::tclook::listMulti {w rowVarName type obj key args} {
     upvar 1 $rowVarName row
     incr row
-    grid [ttk::label $w.k$row -text $key] - - - -sticky ew
+    grid [ttk::label $w.k$row -text $key] - -sticky ew
     if {[llength $args] eq 0} {
         set vals [info $type $key $obj]
     } else {
@@ -101,9 +122,9 @@ proc ::tclook::listMulti {w rowVarName type obj key args} {
         } elseif {$key in {namespace command}} {
             ::tclook::Bind $v $key
         } elseif {$key in {filters}} {
-            ::tclook::BindMethod $v $type $obj $val
+            ::tclook::BindMethod $v 0 0 $type $obj $val
         }
-        grid $k $v - - -sticky ew
+        grid $k $v -sticky ew
     }
 }
 
@@ -111,17 +132,13 @@ proc ::tclook::listMethods {w rowVarName type obj} {
     upvar 1 $rowVarName row
     incr row
     set k [ttk::label $w.k$row -text methods]
-    set p [ttk::label $w.p$row -text P]
-    set l [ttk::label $w.l$row -text L]
-    grid $k - $p $l -sticky ew
+    grid $k - -sticky ew
     foreach method [info $type methods $obj -all -private] {
         incr row
         set k [ttk::label $w.k$row]
         set v [ttk::label $w.v$row -text $method]
-        set p [ttk::label $w.p$row -text [Tick [IsPrivate $type $obj $method]]]
-        set l [ttk::label $w.l$row -text [Tick [IsLocal $type $obj $method]]]
-        ::tclook::BindMethod $v $type $obj $method
-        grid $k $v $p $l -sticky ew
+        ::tclook::BindMethod $v [IsPrivate $type $obj $method] [IsLocal $type $obj $method] $type $obj $method
+        grid $k $v -sticky ew
     }
 }
 
@@ -149,7 +166,7 @@ proc ::tclook::class::Pane {w obj} {
     set type class
     # TODO decide about other subcommands
     ::tclook::listSingle $f row $type $obj name $obj
-    ::tclook::listMulti $f row $type $obj superclasses
+    ::tclook::listMulti $f row $type $obj superclass
     ::tclook::listMulti $f row $type $obj mixins
     ::tclook::listMulti $f row $type $obj filters
     ::tclook::listMulti $f row $type $obj variables
@@ -180,26 +197,26 @@ proc ::tclook::method::Pane {w data} {
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     lassign [info $ooc definition $obj $name] args body
     set key arguments
     set val $args
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     set key body
     set val $body
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     set key type
     set val [info $ooc methodtype $obj $name]
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     grid columnconfigure $f 1 -weight 1
     return $f
 }
@@ -213,26 +230,28 @@ proc ::tclook::command::Pane {w name} {
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     lassign  args body
     set key arguments
     set val [info args $name]
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     set key body
     set val [info body $name]
     incr row
     set k [ttk::label $f.k$row -text $key]
     set v [ttk::label $f.v$row -text $val]
-    grid $k $v - - -sticky ew
+    grid $k $v -sticky ew
     grid columnconfigure $f 1 -weight 1
     return $f
 }
 
-proc ::tclook::BindMethod {w type obj name} {
-    bind $w <1> [list ::tclook::_show method [list $type $obj $name]]
+proc ::tclook::BindMethod {w args} {
+    set args [lassign $args p l]
+    $w config -style [lindex $args 0]$p$l.TLabel
+    bind $w <1> [list ::tclook::_show method $args]
     $w config -cursor hand2
 }
 
@@ -244,7 +263,9 @@ proc ::tclook::Bind {w {label wobj} {cursor hand2}} {
 }
 
 proc ::tclook::Tick val {
-    expr {$val ? "\u2713" : ""}
+    if {$val} {
+        return \u2713
+    }
 }
 
 proc ::tclook::IsPrivate {type obj m} {
@@ -257,5 +278,7 @@ proc ::tclook::IsLocal {type obj m} {
 
 proc ::tclook::NewWindow {} {
     variable wn
-    toplevel .t[incr wn]
+    set w [toplevel .t[incr wn]]
+    wm minsize $w 270 200
+    return $w
 }
