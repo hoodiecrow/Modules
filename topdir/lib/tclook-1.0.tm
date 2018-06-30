@@ -13,9 +13,14 @@ namespace eval tclook {
         namespace eval $ns {}
         ttk::style configure $ns.TLabel -background $color
     }
-    namespace eval object {}
 
     bind wobjPopup <1> {::tclook::show [%W cget -text]}
+    foreach tag {classPopup mixinsPopup superclassesPopup} {
+        bind $tag <1> {::tclook::_show class [%W cget -text]}
+    }
+    foreach tag {namespace command} {
+        bind ${tag}Popup <1> [format {::tclook::_show %s [%%W cget -text]} $tag]
+    }
 }
 
 proc ::tclook::clearAll {} {
@@ -34,9 +39,6 @@ proc ::tclook::show args {
 }
 
 proc ::tclook::_show {types name} {
-    if no {
-        tk_messageBox -message [info level 0] 
-    }
     variable windows
     foreach type $types {
         set key [list $type {*}$name]
@@ -53,8 +55,11 @@ proc ::tclook::_show {types name} {
                 wm title $w $key
                 pack $f -expand yes -fill both
                 set windows($key) $w
-            } on error {} {
+            } on error {msg opts} {
                 destroy $w
+                if no {
+                    return -options [dict incr opts -level] $msg
+                }
                 continue
             }
         }
@@ -63,29 +68,77 @@ proc ::tclook::_show {types name} {
     }
 }
 
+proc ::tclook::listSingle {w rowVarName type obj key args} {
+    upvar 1 $rowVarName row
+    incr row
+    if {[llength $args] eq 0} {
+        set val [info $type $key $obj]
+    } else {
+        lassign $args val
+    }
+    set k [ttk::label $w.k$row -text $key]
+    set v [ttk::label $w.v$row -text $val]
+    ::tclook::Bind $v $key
+    grid $k $v - - -sticky ew
+}
+
+proc ::tclook::listMulti {w rowVarName type obj key args} {
+    upvar 1 $rowVarName row
+    incr row
+    grid [ttk::label $w.k$row -text $key] - - - -sticky ew
+    if {[llength $args] eq 0} {
+        set vals [info $type $key $obj]
+    } else {
+        # note that value of key is changed here
+        lassign $args vals key
+    }
+    foreach val $vals {
+        incr row
+        set k [ttk::label $w.k$row]
+        set v [ttk::label $w.v$row -text $val]
+        if {$key in {superclass mixins instances}} {
+            ::tclook::Bind $v
+        } elseif {$key in {namespace command}} {
+            ::tclook::Bind $v $key
+        } elseif {$key in {filters}} {
+            ::tclook::BindMethod $v $type $obj $val
+        }
+        grid $k $v - - -sticky ew
+    }
+}
+
+proc ::tclook::listMethods {w rowVarName type obj} {
+    upvar 1 $rowVarName row
+    incr row
+    set k [ttk::label $w.k$row -text methods]
+    set p [ttk::label $w.p$row -text P]
+    set l [ttk::label $w.l$row -text L]
+    grid $k - $p $l -sticky ew
+    foreach method [info $type methods $obj -all -private] {
+        incr row
+        set k [ttk::label $w.k$row]
+        set v [ttk::label $w.v$row -text $method]
+        set p [ttk::label $w.p$row -text [Tick [IsPrivate $type $obj $method]]]
+        set l [ttk::label $w.l$row -text [Tick [IsLocal $type $obj $method]]]
+        ::tclook::BindMethod $v $type $obj $method
+        grid $k $v $p $l -sticky ew
+    }
+}
+
 proc ::tclook::object::Pane {w obj} {
     set f [ttk::frame $w.f]
     set type object
     # TODO decide about other subcommands
-    foreach key {name isa class namespace mixins filters variables vars} {
-        if {$key eq "name"} {
-            set val $obj
-        } elseif {$key eq "isa"} {
-            set val [lmap i {class metaclass object} {
-                if {[info object isa $i $obj]} {set i} continue
-            }]
-        } else {
-            set val [info $type $key $obj]
-        }
-        incr row
-        set k [ttk::label $f.k$row -text $key]
-        set v [ttk::label $f.v$row -text $val]
-        switch $key {
-            class     { ::tclook::Bind $v }
-            namespace { ::tclook::Bind $v namespace $val}
-        }
-        grid $k $v - - -sticky ew
-    }
+    ::tclook::listSingle $f row $type $obj name $obj
+    ::tclook::listSingle $f row $type $obj isa [lmap i {class metaclass object} {
+        if {[info object isa $i $obj]} {set i} continue
+    }]
+    ::tclook::listSingle $f row $type $obj class
+    ::tclook::listSingle $f row $type $obj namespace
+    ::tclook::listMulti $f row $type $obj mixins
+    ::tclook::listMulti $f row $type $obj filters
+    ::tclook::listMulti $f row $type $obj variables
+    ::tclook::listMulti $f row $type $obj vars
     ::tclook::listMethods $f row $type $obj
     grid columnconfigure $f 1 -weight 1
     return $f
@@ -95,85 +148,30 @@ proc ::tclook::class::Pane {w obj} {
     set f [ttk::frame $w.f]
     set type class
     # TODO decide about other subcommands
-    foreach key {name superclasses mixins filters variables} {
-        if {$key eq "name"} {
-            set val $obj
-        } else {
-            set val [info $type $key $obj]
-        }
-        incr row
-        set k [ttk::label $f.k$row -text $key]
-        set v [ttk::label $f.v$row -text $val]
-        grid $k $v - - -sticky ew
-    }
-    # instances
-    incr row
-    set k [ttk::label $f.k$row -text instances]
-    set v [ttk::label $f.v$row -text name]
-    grid $k $v - - -sticky ew
-    foreach instance [info $type instances $obj] {
-        incr row
-        set k [ttk::label $f.k$row]
-        set v [ttk::label $f.v$row -text $instance]
-        ::tclook::Bind $v
-        grid $k $v - - -sticky ew
-    }
+    ::tclook::listSingle $f row $type $obj name $obj
+    ::tclook::listMulti $f row $type $obj superclasses
+    ::tclook::listMulti $f row $type $obj mixins
+    ::tclook::listMulti $f row $type $obj filters
+    ::tclook::listMulti $f row $type $obj variables
+    ::tclook::listMulti $f row $type $obj instances
     ::tclook::listMethods $f row $type $obj
     grid columnconfigure $f 1 -weight 1
     return $f
 }
 
-proc ::tclook::listMethods {w rowVarName type obj} {
-    upvar 1 $rowVarName row
-    incr row
-    set k [ttk::label $w.k$row -text methods]
-    set v [ttk::label $w.v$row -text name]
-    set p [ttk::label $w.p$row -text P]
-    set l [ttk::label $w.l$row -text L]
-    grid $k $v $p $l -sticky ew
-    foreach method [info $type methods $obj -all -private] {
-        incr row
-        set k [ttk::label $w.k$row]
-        set v [ttk::label $w.v$row -text $method]
-        set p [ttk::label $w.p$row -text [Tick [IsPrivate $type $obj $method]]]
-        set l [ttk::label $w.l$row -text [Tick [IsLocal $type $obj $method]]]
-        ::tclook::Bind $v method [list $type $obj $method]
-        grid $k $v $p $l -sticky ew
-    }
-}
-
-proc ::tclook::namespace::Pane {w name} {
+proc ::tclook::namespace::Pane {w obj} {
     set f [ttk::frame $w.f]
     set type namespace
-    foreach key {name vars commands children} {
-        if {$key eq "name"} {
-            set vals [list $name]
-        } elseif {$key in {vars commands}} {
-            set vals [info $key $name\::*]
-        } else {
-            set vals [namespace $key $name]
-        }
-        incr row
-        set val {}
-        set k [ttk::label $f.k$row -text $key]
-        set v [ttk::label $f.v$row -text $val]
-        grid $k $v - - -sticky ew
-        foreach val $vals {
-            incr row
-            set k [ttk::label $f.k$row]
-            set v [ttk::label $f.v$row -text $val]
-            switch $key {
-                commands { ::tclook::Bind $v command $val}
-                children { ::tclook::Bind $v namespace $val}
-            }
-            grid $k $v - - -sticky ew
-        }
-    }
+    ::tclook::listSingle $f row $type $obj name $obj
+    ::tclook::listMulti $f row $type $obj vars [info vars $obj\::*]
+    ::tclook::listMulti $f row $type $obj commands [info commands $obj\::*] command
+    ::tclook::listMulti $f row $type $obj children [namespace children $obj] namespace
     grid columnconfigure $f 1 -weight 1
     return $f
 }
 
 proc ::tclook::method::Pane {w data} {
+    # TODO rewrite to look more method-like
     lassign $data ooc obj name
     set type method
     set f [ttk::frame $w.f]
@@ -207,9 +205,7 @@ proc ::tclook::method::Pane {w data} {
 }
 
 proc ::tclook::command::Pane {w name} {
-    if no {
-        tk_messageBox -message [info level 0]
-    }
+    # TODO rewrite to look more command-like
     set type command
     set f [ttk::frame $w.f]
     set key name
@@ -235,11 +231,13 @@ proc ::tclook::command::Pane {w name} {
     return $f
 }
 
-proc ::tclook::Bind {w {label wobj} {data {}} {cursor hand2}} {
-    if {$label in {method namespace command}} {
-        bind $w <1> [list ::tclook::_show $label $data]
-        $w config -cursor hand2
-    } else {
+proc ::tclook::BindMethod {w type obj name} {
+    bind $w <1> [list ::tclook::_show method [list $type $obj $name]]
+    $w config -cursor hand2
+}
+
+proc ::tclook::Bind {w {label wobj} {cursor hand2}} {
+    if {$label ni {name isa}} {
         bindtags $w [linsert [bindtags $w] 0 ${label}Popup]
         $w config -cursor $cursor
     }
@@ -260,40 +258,4 @@ proc ::tclook::IsLocal {type obj m} {
 proc ::tclook::NewWindow {} {
     variable wn
     toplevel .t[incr wn]
-}
-
-return
-
-proc ::tclook::GetDict obj {
-    set result {}
-    set obj [uplevel 1 [list namespace which -command $obj]]
-    dict set result object name $obj
-    array set isa [concat {*}[lmap i {class metaclass object} {
-        list $i [info object isa $i $obj]
-    }]]
-    dict set result object isa [dict keys [dict filter [array get isa] value 1]]
-    # TODO decide about other subcommands
-    set type class
-    if {$isa($type)} {
-        foreach subcmd {superclasses mixins filters variables instances} {
-            dict set result $type $subcmd [info $type $subcmd $obj]
-        }
-        set methods [lsort -dictionary [info $type methods $obj -private -all]]
-        foreach method $methods {
-            dict set result $type methods $method private [IsPrivate $type $obj $method]
-            dict set result $type methods $method local [IsLocal $type $obj $method]
-        }
-    }
-    set type object
-    if {$isa($type)} {
-        foreach subcmd {class mixins filters variables namespace vars} {
-            dict set result $type $subcmd [info $type $subcmd $obj]
-        }
-        set methods [lsort -dictionary [info $type methods $obj -private -all]]
-        foreach method $methods {
-            dict set result $type methods $method private [IsPrivate $type $obj $method]
-            dict set result $type methods $method local [IsLocal $type $obj $method]
-        }
-    }
-    return $result
 }
