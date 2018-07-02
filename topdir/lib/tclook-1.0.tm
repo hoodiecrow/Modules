@@ -3,144 +3,136 @@ package require textutil::adjust
 
 namespace eval tclook {
     foreach ns {object class namespace method command} {
-        namespace eval $ns {}
+        namespace eval $ns {
+            namespace path ::tclook
+        }
     }
 }
 
 proc ::tclook::clearAll {} {
-    destroy {*}[dict values [array get [namespace current]::windows]]
+    # Close any still-open windows that have been opened by us.
+    variable windows
+    destroy {*}[dict values [array get windows]]
 }
 
 proc ::tclook::show args {
+    # Take a sequence of names and attempt to open then as object panes and as
+    # class panes.
     foreach name $args {
-        _show {object class} [uplevel 1 [list namespace which $name]]
+        set name [uplevel 1 [list namespace which $name]]
+        _show object $name
+        _show class $name
     }
 }
 
-proc ::tclook::_show {types data} {
-    foreach type $types {
-        GetWindow $type $data
-    }
+proc ::tclook::_show {type data} {
+    # Open a pane given a type and a name. Does not raise errors.
+    GetWindow $type $data
 }
 
-proc ::tclook::AddRow {w row key val} {
-    set k [ttk::label $w.k$row -text $key]
-    if {$val eq "-"} {
-        set v -
-    } else {
-        set v [ttk::label $w.v$row -text $val]
-    }
-    grid $k $v -sticky ew
-    return $v
-}
-
-proc ::tclook::object::Pane {f obj} {
+proc ::tclook::object::Pane {pane obj} {
     set type [namespace tail [namespace current]]
     # TODO decide about other subcommands
-    set row 0
-    ::tclook::AddRow $f [incr row] name $obj
-    ::tclook::AddRow $f [incr row] isa [::tclook::GetIsa $obj]
+    $pane add name $obj
+    $pane add isa [GetIsa $obj]
     foreach key {class namespace} {
         set val [info $type $key $obj]
-        ::tclook::Bind [::tclook::AddRow $f [incr row] $key $val] $key
+        $pane add $key $val Bind $key
     }
-    ::tclook::AddRow $f [incr row] mixins {}
+    $pane add mixins
     foreach val [info $type mixins $obj] {
-        ::tclook::Bind [::tclook::AddRow $f [incr row] {} $val]
+        $pane add {} $val Bind 
     }
-    ::tclook::AddRow $f [incr row] filters {}
+    $pane add filters
     foreach val [info $type filters $obj] {
         set data [list 0 0 $type $obj $val]
-        ::tclook::BindMethod [::tclook::AddRow $f [incr row] {} $val] {*}$data
+        $pane add {} $val BindMethod {*}$data
     }
-    ::tclook::AddRow $f [incr row] variables {}
+    $pane add variables
     foreach val [info $type variables $obj] {
-        ::tclook::AddRow $f [incr row] {} $val
+        $pane add {} $val
     }
-    ::tclook::AddRow $f [incr row] vars {}
+    $pane add vars
     foreach val [info $type vars $obj] {
-        ::tclook::AddRow $f [incr row] {} $val
+        $pane add {} $val
     }
-    ::tclook::AddRow $f [incr row] methods {}
+    $pane add methods
     foreach val [info $type methods $obj -all -private] {
         set data [list]
-        lappend data [::tclook::IsPrivate $type $obj $val]
-        lappend data [::tclook::IsLocal $type $obj $val]
+        lappend data [IsPrivate $type $obj $val]
+        lappend data [IsLocal $type $obj $val]
         lappend data $type $obj $val
-        ::tclook::BindMethod [::tclook::AddRow $f [incr row] {} $val] {*}$data
+        $pane add {} $val BindMethod {*}$data
     }
 }
 
-proc ::tclook::class::Pane {f obj} {
+proc ::tclook::class::Pane {pane obj} {
     set type [namespace tail [namespace current]]
     # TODO decide about other subcommands
-    set row 0
-    ::tclook::AddRow $f [incr row] name $obj
-    ::tclook::AddRow $f [incr row] superclass {}
+    $pane add name $obj
+    $pane add superclass
     foreach val [info $type superclass $obj] {
-        ::tclook::Bind [::tclook::AddRow $f [incr row] {} $val]
+        $pane add {} $val Bind 
     }
-    ::tclook::AddRow $f [incr row] mixins {}
+    $pane add mixins
     foreach val [info $type mixins $obj] {
-        ::tclook::Bind [::tclook::AddRow $f [incr row] {} $val]
+        $pane add {} $val Bind 
     }
-    ::tclook::AddRow $f [incr row] filters {}
+    $pane add filters
     foreach val [info $type filters $obj] {
         set data [list 0 0 $type $obj $val]
-        ::tclook::BindMethod [::tclook::AddRow $f [incr row] {} $val] {*}$data
+        $pane add {} $val BindMethod {*}$data
     }
-    ::tclook::AddRow $f [incr row] variables {}
+    $pane add variables
     foreach val [info $type variables $obj] {
-        ::tclook::AddRow $f [incr row] {} $val
+        $pane add {} $val
     }
-    ::tclook::AddRow $f [incr row] instances {}
+    $pane add instances
     foreach val [info $type instances $obj] {
-        ::tclook::Bind [::tclook::AddRow $f [incr row] {} $val]
+        $pane add {} $val Bind 
     }
-    ::tclook::AddRow $f [incr row] methods {}
+    $pane add methods
     foreach val [info $type methods $obj -all -private] {
         set data [list]
-        lappend data [::tclook::IsPrivate $type $obj $val]
-        lappend data [::tclook::IsLocal $type $obj $val]
+        lappend data [IsPrivate $type $obj $val]
+        lappend data [IsLocal $type $obj $val]
         lappend data $type $obj $val
-        ::tclook::BindMethod [::tclook::AddRow $f [incr row] {} $val] {*}$data
+        $pane add {} $val BindMethod {*}$data
     }
 }
 
-proc ::tclook::namespace::Pane {f obj} {
-    set row 0
-    ::tclook::AddRow $f [incr row] name $obj
-    ::tclook::AddRow $f [incr row] vars {}
+proc ::tclook::namespace::Pane {pane obj} {
+    $pane add name $obj
+    $pane add vars
     foreach val [info vars $obj\::*] {
-        ::tclook::AddRow $f [incr row] {} $val
+        $pane add {} $val
     }
-    ::tclook::AddRow $f [incr row] commands {}
+    $pane add commands
     foreach val [info commands $obj\::*] {
-        ::tclook::Bind [::tclook::AddRow $f [incr row] {} $val] command
+        $pane add {} $val Bind command
     }
-    ::tclook::AddRow $f [incr row] children {}
+    $pane add children
     foreach val [namespace children $obj] {
-        ::tclook::Bind [::tclook::AddRow $f [incr row] {} $val] namespace
+        $pane add {} $val Bind namespace
     }
 }
 
-proc ::tclook::method::Pane {f data} {
+proc ::tclook::method::Pane {pane data} {
     lassign $data type obj name
-    set row 0
     set code [info $type methodtype $obj $name]
     lassign [info $type definition $obj $name] args body
     append code " $name {$args} {"
     append code [::textutil::adjust::undent "$body}"]
-    ::tclook::AddRow $f [incr row] $code -
+    $pane add $code -
 }
 
-proc ::tclook::command::Pane {f name} {
-    set row 0
+proc ::tclook::command::Pane {pane name} {
+    set code proc
     set args [info args $name]
     set body [info body $name]
-    append code "proc $name {$args} {"
+    append code " $name {$args} {"
     append code [::textutil::adjust::undent "$body}"]
-    ::tclook::AddRow $f [incr row] $code -
+    $pane add $code -
 }
 
 proc ::tclook::BindMethod {w args} {
@@ -171,19 +163,45 @@ proc ::tclook::IsLocal {type obj m} {
     expr {$m in [concat [info $type methods $obj] [info $type methods $obj -private]]}
 }
 
-proc ::tclook::NewWindow title {
-    variable wn
-    set w [toplevel .t[incr wn]]
-    wm minsize $w 270 200
-    wm title $w $title
-    return $w
-}
-
-proc ::tclook::SetStyle {f type} {
-    foreach ch [winfo children $f] {
-        if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
-            $ch config -style $type.TLabel
+oo::class create ::tclook::Pane {
+    variable type w frame rownum
+    constructor args {
+        lassign $args type title
+        my NewWindow $title
+        set frame [ttk::frame $w.f]
+        set rownum 0
+    }
+    method destroyWindow {} {
+        destroy $w
+    }
+    method NewWindow title {
+        set w [toplevel .t[incr ::tclook::wn]]
+        wm minsize $w 270 200
+        wm title $w $title
+    }
+    method add {key {val {}} args} {
+        incr rownum
+        set k [ttk::label $frame.k$rownum -text $key]
+        if {$val eq "-"} {
+            set v -
+        } else {
+            set v [ttk::label $frame.v$rownum -text $val]
         }
+        grid $k $v -sticky ew
+        if {[llength $args] > 0} {
+            namespace eval ::tclook [linsert $args 1 $v]
+        }
+        return $v
+    }
+    method window {} {
+        grid columnconfigure $frame 1 -weight 1
+        foreach ch [winfo children $frame] {
+            if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
+                $ch config -style $type.TLabel
+            }
+        }
+        pack $frame -expand yes -fill both
+        return $w
     }
 }
 
@@ -191,22 +209,21 @@ proc ::tclook::GetWindow {type data} {
     variable windows
     set key [list $type {*}$data]
     if {![info exists windows($key)] || ![winfo exists $windows($key)]} {
-        set w [NewWindow $key]
-        set f [ttk::frame $w.f]
+        set pane [Pane new $type $key]
         try {
-            $type\::Pane $f $data
+            $type\::Pane $pane $data
         } on ok {} {
-            grid columnconfigure $f 1 -weight 1
-            SetStyle $f $type
-            pack $f -expand yes -fill both
-            set windows($key) $w
+            set windows($key) [$pane window]
         } on error {msg opts} {
-            destroy $w
+            $pane destroyWindow
             if 0 {
                 return -options [dict incr opts -level] $msg
             } else {
                 return -level 2 -code continue
             }
+        } finally {
+            # Destroy Pane instance, leaving window behind.
+            $pane destroy
         }
     }
     raise $windows($key)
@@ -262,6 +279,7 @@ proc ::tclook::Init {} {
 
 return
 
+package require log
 cd ~/code/Modules/
 tcl::tm::path add topdir/lib/
 package require tclook
@@ -269,67 +287,3 @@ package require tclook
 ::tclook::clearAll ; package forget tclook ; package require tclook
 source -encoding utf-8 automaton-20180628-2.tcl
 ::tclook::show oo::class
-
-if 0 {
-    get <type> window
-        key <- type {*}name
-        # name is atom or (for method) {type obj val}
-        w <- NewWindow
-        f <- create frame
-        $type\::Pane $f $name
-        SetWeight
-        SetStyle $type
-        pack
-        add to windows $key $w
-    
-    create object Pane (f obj)
-        add row name $obj
-        add row isa GetIsa
-        Bind (add row class (ObjectGetClass $obj)) class
-        Bind (add row namespace (ObjectGetNamespace)) namespace
-        add row mixins {}
-        ObjectGetMixins $obj each (Bind (add row))
-        add row filters {}
-        ObjectGetFilters $obj each (BindMethod (add row) 0 0 object $obj $val?)
-        add row variables {}
-        ObjectGetVariables $obj each (add row)
-        add row vars {}
-        ObjectGetVars $obj each (add row)
-        add row methods {}
-        ObjectGetMethods $obj each (BindMethod (add row) (P) (L) object $obj)
-
-    create class Pane (f obj)
-        add row name $obj
-        add row superclass {}
-        ClassGetSuperclass $obj each (Bind (add row))
-        add row mixins {}
-        ClassGetMixins $obj each (Bind (add row))
-        add row filters {}
-        ClassGetFilters $obj each (BindMethod (add row) 0 0 object $obj $val?)
-        add row variables {}
-        ClassGetVariables $obj 
-        add row instances {}
-        ClassGetInstances $obj each (Bind (add row))
-        add row methods {}
-        ClassGetMethods $obj each (BindMethod (add row) (P) (L) class $obj)
-        
-    create namespace Pane (f obj)
-        add row name $obj
-        GetVars $obj each (add row)
-        GetCommands $obj each (Bind (add row) command)
-        GetNamespaceChildren $obj each (Bind (add row) namespace)
-
-    create method Pane (f (type obj name))
-        code <- ${type}GetMethodtype $obj $name
-        (args body) <- ${type}GetDefinition $obj $name
-        code << $name {$args} {$body}
-        BindMethod (add row $code -) (P) (L) $type $obj
-
-    create command Pane (f name)
-        add row name $obj
-        args <- GetArgs
-        body <- GetBody
-        code <- proc $name {$args} {$body}
-        add row $code -
-
-}
