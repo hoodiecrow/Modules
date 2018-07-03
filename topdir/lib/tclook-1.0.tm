@@ -22,7 +22,8 @@ proc ::tclook::show args {
 proc ::tclook::_show args {
     log::log d [info level 0] 
     # Bring up a pane if it has been opened before, or else try to make a new
-    # one. Catch any errors raised by creating a pane.
+    # one. Catch any errors raised by creating a pane, unless -showerrors is
+    # given.
     variable windows
     if {[lindex $args 0] eq "-showerrors"} {
         set showErrors true
@@ -33,21 +34,24 @@ proc ::tclook::_show args {
     }
     set key [list $type {*}$data]
     if {![info exists windows($key)] || ![winfo exists $windows($key)]} {
+        # Create a PaneMaker instance. It will do most of the work of creating
+        # a pane, and provide the 'add' method to insert items in it.
         set pane [PaneMaker new]
         try {
             $pane openWindow $key
         } on ok {} {
+            # It worked, transfer the window path to the windows array.
             set windows($key) [$pane window]
         } on error {msg opts} {
+            # It didn't work, pass or catch the error.
             if {$showErrors} {
                 return -options [dict incr opts -level] $msg
             }
         } finally {
-            # Destroy PaneMaker instance, leaving window behind if created
-            # successfully.
             catch { $pane destroy }
         }
     }
+    # One way or another, we now have a window. Bring it up.
     raise $windows($key)
     focus $windows($key)
 }
@@ -59,6 +63,42 @@ namespace eval ::tclook::Pane {
         lappend map $type ${type}Pane
     }
     namespace ensemble create -map $map
+
+proc objectPrint data {
+    set maxkey [::tcl::mathfunc::max {*}[lmap key [dict keys $data] {
+        string length $key
+    }]]
+    dict for {key val} $data {
+        if {$key eq "type"} {
+            continue
+        }
+        lassign $val kind values
+        if {$kind eq "L"} {
+            set values [join $values ", "]
+        }
+        puts [format {%-*s %s} $maxkey $key $values]
+    }
+}
+
+proc objectShow data {
+    # TODO feed a data dictionary to a proc that shows it as a pane (tk::frame
+    # with tk::labels), fixing bindtags and -background/-font
+}
+
+proc objectList obj {
+    set type object
+    # TODO decide about other subcommands
+    dict set result type S $type
+    dict set result name S $obj
+    dict set result isa S [::tclook::GetIsa $obj]
+    foreach key {class namespace} {
+        dict set result $key S [info $type $key $obj]
+    }
+    foreach key {mixins filters variables vars} {
+        dict set result $key L [info $type $key $obj]
+    }
+    dict set result methods L [info $type methods $obj -all -private]
+}
 
 proc objectPane {pane obj} {
     set type object
@@ -191,15 +231,26 @@ proc ::tclook::IsLocal {type obj m} {
 }
 
 oo::class create ::tclook::PaneMaker {
+    # This class creates an introspection pane and helps the type-specific
+    # command furnish it. If the pane's path is passed out of the class using
+    # the 'window' method, the window is detached from the instance. If not,
+    # the window gets destroyed when the instance is.
     variable w frame rownum
     constructor args {}
+    destructor {
+        destroy $w
+    }
     method openWindow title {
-    log::log d [info level 0] 
-        my NewWindow $title
+        # The 'title' argument is a list. The first element is the pane type
+        # and the rest of the elements is the data set to determine its
+        # contents: for many panes it is simply the qualified name.
+        set w [toplevel .t[incr ::tclook::wn]]
+        wm minsize $w 270 200
+        wm title $w $title
         set frame [ttk::frame $w.f]
+        pack $frame -expand yes -fill both
         set data [lassign $title type]
-        log::log d \$type=$type 
-        log::log d \$data=$data 
+        # This action might fail if any introspection step fails.
         try {
             ::tclook::Pane $type [self] $data
         } on ok {} {
@@ -209,16 +260,7 @@ oo::class create ::tclook::PaneMaker {
                     $ch config -style $type.TLabel
                 }
             }
-            pack $frame -expand yes -fill both
-        } on error {msg opts} {
-            destroy $w
-            return -options [dict incr opts -level] $msg
         }
-    }
-    method NewWindow title {
-        set w [toplevel .t[incr ::tclook::wn]]
-        wm minsize $w 270 200
-        wm title $w $title
     }
     method add {key {val {}} args} {
         incr rownum
@@ -235,7 +277,9 @@ oo::class create ::tclook::PaneMaker {
         return $v
     }
     method window {} {
-        return $w
+        set win $w
+        set w {}
+        return $win
     }
 }
 
@@ -272,7 +316,7 @@ proc ::tclook::Init {} {
             ttk::style configure $type$f.TLabel -font [set font$f]
         }
     }
-    font configure $fontme {*}[dict merge $fontdict {-family courier -size 12}]
+    font configure $fontme {*}[dict merge $fontdict {-family courier -size 11}]
     ttk::style configure method.TLabel -font $fontme
 
     bind wobjPopup <1> {::tclook::show [%W cget -text]}
