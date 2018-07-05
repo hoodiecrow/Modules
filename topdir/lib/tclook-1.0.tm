@@ -10,50 +10,195 @@ proc ::tclook::clearAll {} {
 }
 
 proc ::tclook::show args {
-    # Take a sequence of names and attempt to open then as object panes and as
-    # class panes.
+    # 'args' is a sequence of names. Attempt to resolve each name as a
+    # qualified command name, and to open a pane for the name as an object, a
+    # class, a namespace, or a procedure. 
     foreach name $args {
-        set name [uplevel 1 [list namespace which $name]]
-        _show object $name
-        _show class $name
+        set _name [uplevel 1 [list namespace which $name]]
+        if {$_name ne {}} {
+            set name $_name
+        }
+        if {[info object isa object $name]} {
+            _show object $name
+            if {[info object isa class $name]} {
+                _show class $name
+            }
+        } elseif {[namespace exists $name]} {
+            _show namespace $name
+        } elseif {$name in [info procs [namespace qualifiers $name]::*]} {
+            _show command $name
+        } else {
+            return -code error [format {unknown thing %s} $name]
+        }
     }
 }
 
 proc ::tclook::_show args {
-    log::log d [info level 0] 
     # Bring up a pane if it has been opened before, or else try to make a new
     # one. Catch any errors raised by creating a pane, unless -showerrors is
     # given.
     variable windows
-    if {[lindex $args 0] eq "-showerrors"} {
-        set showErrors true
-        lassign $args - type data
-    } else {
-        set showErrors false
-        lassign $args type data
-    }
-    set key [list $type {*}$data]
+    variable wn
+    set key $args
     if {![info exists windows($key)] || ![winfo exists $windows($key)]} {
-        # Create a PaneMaker instance. It will do most of the work of creating
-        # a pane, and provide the 'add' method to insert items in it.
-        set pane [PaneMaker new]
-        try {
-            $pane openWindow $key
-        } on ok {} {
-            # It worked, transfer the window path to the windows array.
-            set windows($key) [$pane window]
-        } on error {msg opts} {
-            # It didn't work, pass or catch the error.
-            if {$showErrors} {
-                return -options [dict incr opts -level] $msg
+        set w [toplevel .t[incr wn]]
+        wm minsize $w 270 200
+        wm title $w $key
+        set frame [ttk::frame $w.f]
+        pack $frame -expand yes -fill both
+        set pane [PaneMaker new $frame]
+        ::tclook::Pane {*}$key $pane
+        catch { $pane destroy }
+        grid columnconfigure $frame 1 -weight 1
+        foreach ch [winfo children $frame] {
+            if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
+                $ch config -style [lindex $key 0].TLabel
             }
-        } finally {
-            catch { $pane destroy }
         }
+        set windows($key) $w
     }
     # One way or another, we now have a window. Bring it up.
     raise $windows($key)
     focus $windows($key)
+}
+
+namespace eval ::tclook::Print {
+    namespace export {[a-z]*}
+    variable map {}
+    foreach type {object class namespace method command} {
+        lappend map $type ${type}Print
+    }
+    namespace ensemble create -map $map
+
+    proc objectPrint data {
+        set info [::tclook::List object $data]
+        set maxkey [::tcl::mathfunc::max {*}[lmap key [dict keys $info] {
+            string length $key
+        }]]
+        dict for {key val} $info {
+            if {$key eq "type"} {
+                continue
+            }
+            lassign $val kind values
+            if {$kind eq "L"} {
+                set values [join $values ", "]
+            }
+            puts [format {%-*s %s} $maxkey $key $values]
+        }
+    }
+
+    proc classPrint data {
+        set info [::tclook::List class $data]
+        set maxkey [::tcl::mathfunc::max {*}[lmap key [dict keys $info] {
+            string length $key
+        }]]
+        dict for {key val} $info {
+            if {$key eq "type"} {
+                continue
+            }
+            lassign $val kind values
+            if {$kind eq "L"} {
+                set values [join $values ", "]
+            }
+            puts [format {%-*s %s} $maxkey $key $values]
+        }
+    }
+
+    proc namespacePrint data {
+        set info [::tclook::List namespace $data]
+        set maxkey [::tcl::mathfunc::max {*}[lmap key [dict keys $info] {
+            string length $key
+        }]]
+        dict for {key val} $info {
+            if {$key eq "type"} {
+                continue
+            }
+            lassign $val kind values
+            if {$kind eq "L"} {
+                set values [join $values ", "]
+            }
+            puts [format {%-*s %s} $maxkey $key $values]
+        }
+    }
+
+    proc methodPrint data {
+        set info [::tclook::List method $data]
+        set info [dict map {- val} $info {lindex $val 1}]
+        dict with info {
+            puts "$mtype $name {$args} {$body}"
+        }
+    }
+
+    proc commandPrint name {
+        set info [::tclook::List command $name]
+        set info [dict map {- val} $info {lindex $val 1}]
+        dict with info {
+            puts "proc $name {$args} {$body}"
+        }
+    }
+
+}
+
+namespace eval ::tclook::List {
+    namespace export {[a-z]*}
+    variable map {}
+    foreach type {object class namespace method command} {
+        lappend map $type ${type}List
+    }
+    namespace ensemble create -map $map
+
+    proc objectList obj {
+        set type object
+        # TODO decide about other subcommands
+        dict set result type S $type
+        dict set result name S $obj
+        dict set result isa S [::tclook::GetIsa $obj]
+        foreach key {class namespace} {
+            dict set result $key S [info $type $key $obj]
+        }
+        foreach key {mixins filters variables vars} {
+            dict set result $key L [info $type $key $obj]
+        }
+        dict set result methods L [info $type methods $obj -all -private]
+    }
+
+    proc classList obj {
+        set type class
+        # TODO decide about other subcommands
+        dict set result type S $type
+        dict set result name S $obj
+        dict set result superclass S [info $type superclass $obj]
+        foreach key {mixins filters variables instances} {
+            dict set result $key L [info $type $key $obj]
+        }
+        dict set result methods L [info $type methods $obj -all -private]
+    }
+
+    proc namespaceList obj {
+        dict set result type S namespace
+        dict set result name S $obj
+        dict set result vars L [info vars $obj\::*]
+        dict set result commands L [info commands $obj\::*]
+        dict set result children L [namespace children $obj]
+    }
+
+    proc methodList data {
+        lassign $data type obj name
+        dict set result type S method
+        dict set result mtype S [info $type methodtype $obj $name]
+        dict set result name S $name
+        lassign [info $type definition $obj $name] args body
+        dict set result args S $args
+        dict set result body S [string trimright [::textutil::adjust::undent $body\x7f] \x7f]
+    }
+
+    proc commandList name {
+        dict set result type S command
+        dict set result name S $name
+        dict set result args S [info args $name]
+        dict set result body S [string trimright [::textutil::adjust::undent [info body $name]\x7f] \x7f]
+    }
+
 }
 
 namespace eval ::tclook::Pane {
@@ -64,137 +209,98 @@ namespace eval ::tclook::Pane {
     }
     namespace ensemble create -map $map
 
-proc objectPrint data {
-    set maxkey [::tcl::mathfunc::max {*}[lmap key [dict keys $data] {
-        string length $key
-    }]]
-    dict for {key val} $data {
-        if {$key eq "type"} {
-            continue
+    proc objectPane {data pane} {
+        set type object
+        set info [::tclook::List ${type} $data]
+        set info [dict map {- val} $info {lindex $val 1}]
+        $pane add name [dict get $info name]
+        $pane add isa  [dict get $info isa]
+        foreach key {class namespace} {
+            $pane add $key [dict get $info $key] Bind $key
         }
-        lassign $val kind values
-        if {$kind eq "L"} {
-            set values [join $values ", "]
+        $pane add mixins
+        foreach val [dict get $info mixins] {
+            $pane add {} $val Bind
         }
-        puts [format {%-*s %s} $maxkey $key $values]
+        $pane add filters
+        foreach val [dict get $info filters] {
+            $pane add {} $val BindMethod 0 0 $type [dict get $info name] $val
+        }
+        foreach key {variables vars} {
+            $pane add $key
+            foreach val [dict get $info $key] {
+                $pane add {} $val
+            }
+        }
+        $pane add methods
+        foreach val [dict get $info methods] {
+            $pane add {} $val BindMethod $type [dict get $info name] $val
+        }
     }
-}
 
-proc objectShow data {
-    # TODO feed a data dictionary to a proc that shows it as a pane (tk::frame
-    # with tk::labels), fixing bindtags and -background/-font
-}
+    proc classPane {data pane} {
+        set type class
+        set info [::tclook::List ${type} $data]
+        set info [dict map {- val} $info {lindex $val 1}]
+        $pane add name [dict get $info name]
+        $pane add superclass [dict get $info superclass] Bind class
+        $pane add mixins
+        foreach val [dict get $info mixins] {
+            $pane add {} $val Bind
+        }
+        $pane add filters
+        foreach val [dict get $info filters] {
+            $pane add {} $val BindMethod 0 0 $type [dict get $info name] $val
+        }
+        $pane add variables
+        foreach val [dict get $info variables] {
+            $pane add {} $val
+        }
+        $pane add instances
+        foreach val [dict get $info instances] {
+            $pane add {} $val Bind
+        }
+        $pane add methods
+        foreach val [dict get $info methods] {
+            $pane add {} $val BindMethod $type [dict get $info name] $val
+        }
+    }
 
-proc objectList obj {
-    set type object
-    # TODO decide about other subcommands
-    dict set result type S $type
-    dict set result name S $obj
-    dict set result isa S [::tclook::GetIsa $obj]
-    foreach key {class namespace} {
-        dict set result $key S [info $type $key $obj]
+    proc namespacePane {data pane} {
+        set type namespace
+        set info [::tclook::List ${type} $data]
+        set info [dict map {- val} $info {lindex $val 1}]
+        $pane add name [dict get $info name]
+        $pane add vars
+        foreach val [dict get $info vars] {
+            $pane add {} $val
+        }
+        $pane add commands
+        foreach val [dict get $info commands] {
+            $pane add {} $val Bind command
+        }
+        $pane add children
+        foreach val [dict get $info children] {
+            $pane add {} $val Bind namespace
+        }
     }
-    foreach key {mixins filters variables vars} {
-        dict set result $key L [info $type $key $obj]
-    }
-    dict set result methods L [info $type methods $obj -all -private]
-}
 
-proc objectPane {pane obj} {
-    set type object
-    # TODO decide about other subcommands
-    $pane add name $obj
-    $pane add isa [::tclook::GetIsa $obj]
-    foreach key {class namespace} {
-        set val [info $type $key $obj]
-        $pane add $key $val Bind $key
+    proc methodPane {data pane} {
+        set info [::tclook::List method $data]
+        set info [dict map {- val} $info {lindex $val 1}]
+        dict with info {
+            $pane add "$mtype $name {$args} {$body}" -
+        }
     }
-    $pane add mixins
-    foreach val [info $type mixins $obj] {
-        $pane add {} $val Bind 
-    }
-    $pane add filters
-    foreach val [info $type filters $obj] {
-        $pane add {} $val BindMethod 0 0 $type $obj $val
-    }
-    $pane add variables
-    foreach val [info $type variables $obj] {
-        $pane add {} $val
-    }
-    $pane add vars
-    foreach val [info $type vars $obj] {
-        $pane add {} $val
-    }
-    $pane add methods
-    foreach val [info $type methods $obj -all -private] {
-        $pane add {} $val BindMethod $type $obj $val
-    }
-}
 
-proc classPane {pane obj} {
-    set type class
-    # TODO decide about other subcommands
-    $pane add name $obj
-    $pane add superclass
-    foreach val [info $type superclass $obj] {
-        $pane add {} $val Bind 
+    proc commandPane {name pane} {
+        set info [::tclook::List command $name]
+        set info [dict map {- val} $info {lindex $val 1}]
+        dict with info {
+            $pane add "proc $name {$args} {$body}" -
+        }
     }
-    $pane add mixins
-    foreach val [info $type mixins $obj] {
-        $pane add {} $val Bind 
-    }
-    $pane add filters
-    foreach val [info $type filters $obj] {
-        set data [list 0 0 $type $obj $val]
-        $pane add {} $val BindMethod 0 0 $type $obj $val
-    }
-    $pane add variables
-    foreach val [info $type variables $obj] {
-        $pane add {} $val
-    }
-    $pane add instances
-    foreach val [info $type instances $obj] {
-        $pane add {} $val Bind 
-    }
-    $pane add methods
-    foreach val [info $type methods $obj -all -private] {
-        $pane add {} $val BindMethod $type $obj $val
-    }
-}
 
-proc namespacePane {pane obj} {
-    $pane add name $obj
-    $pane add vars
-    foreach val [info vars $obj\::*] {
-        $pane add {} $val
-    }
-    $pane add commands
-    foreach val [info commands $obj\::*] {
-        $pane add {} $val Bind command
-    }
-    $pane add children
-    foreach val [namespace children $obj] {
-        $pane add {} $val Bind namespace
-    }
-}
-
-proc methodPane {pane data} {
-    lassign $data type obj name
-    set code [info $type methodtype $obj $name]
-    lassign [info $type definition $obj $name] args body
-    append code " $name {$args} {"
-    append code [::textutil::adjust::undent "$body}"]
-    $pane add $code -
-}
-
-proc commandPane {pane name} {
-    set code proc
-    set args [info args $name]
-    set body [info body $name]
-    append code " $name {$args} {"
-    append code [::textutil::adjust::undent "$body}"]
-    $pane add $code -
-}
 }
 
 proc ::tclook::BindMethod {w args} {
@@ -231,36 +337,9 @@ proc ::tclook::IsLocal {type obj m} {
 }
 
 oo::class create ::tclook::PaneMaker {
-    # This class creates an introspection pane and helps the type-specific
-    # command furnish it. If the pane's path is passed out of the class using
-    # the 'window' method, the window is detached from the instance. If not,
-    # the window gets destroyed when the instance is.
-    variable w frame rownum
-    constructor args {}
-    destructor {
-        destroy $w
-    }
-    method openWindow title {
-        # The 'title' argument is a list. The first element is the pane type
-        # and the rest of the elements is the data set to determine its
-        # contents: for many panes it is simply the qualified name.
-        set w [toplevel .t[incr ::tclook::wn]]
-        wm minsize $w 270 200
-        wm title $w $title
-        set frame [ttk::frame $w.f]
-        pack $frame -expand yes -fill both
-        set data [lassign $title type]
-        # This action might fail if any introspection step fails.
-        try {
-            ::tclook::Pane $type [self] $data
-        } on ok {} {
-            grid columnconfigure $frame 1 -weight 1
-            foreach ch [winfo children $frame] {
-                if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
-                    $ch config -style $type.TLabel
-                }
-            }
-        }
+    variable frame rownum
+    constructor args {
+        lassign $args frame
     }
     method add {key {val {}} args} {
         incr rownum
@@ -276,14 +355,10 @@ oo::class create ::tclook::PaneMaker {
         }
         return $v
     }
-    method window {} {
-        set win $w
-        set w {}
-        return $win
-    }
 }
 
 proc ::tclook::Init {} {
+    # TODO this method needs an overhaul
     variable windows
     array set windows {}
     foreach {style color} {
