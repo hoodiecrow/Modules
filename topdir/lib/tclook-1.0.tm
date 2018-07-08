@@ -26,20 +26,7 @@ proc ::tclook::show args {
 }
 
 proc ::tclook::_pane args {
-    # Bring up a pane if it has been opened before, or else try to make a new
-    # one. Catch any errors raised by creating a pane, unless -showerrors is
-    # given.
-    variable panes
-    if {![info exists panes($args)] || ![winfo exists $panes($args)]} {
-        set info [Dict {*}$args]
-        if {$info eq {}} {
-            return
-        }
-        set panes($args) [OpenPane $info]
-    }
-    # One way or another, we now have a window. Bring it up.
-    raise $panes($args)
-    focus $panes($args)
+    ::tclook::Pane::Open [Dict {*}$args]
 }
 
 proc ::tclook::_text args {
@@ -54,20 +41,12 @@ proc ::tclook::_text args {
 }
 
 proc ::tclook::_page args {
-    set info [Dict {*}$args]
-    if {$info eq {}} {
-        return
-    }
-    OpenPage $info
-    lassign [dict get $info title] - title
-    lassign [dict get $info type] - type
-    Page $type $title
+    ::tclook::Page::Open [Dict {*}$args]
 }
 
 proc ::tclook::clearAll {} {
     # Close any still-open panes that have been opened by us.
-    variable panes
-    destroy {*}[dict values [array get panes]]
+    ::tclook::Pane::Clear
 }
 
 namespace eval ::tclook::Dict {
@@ -84,7 +63,7 @@ namespace eval ::tclook::Dict {
         dict set result title S "$type $obj"
         dict set result type S $type
         dict set result name S $obj
-        dict set result isa S [::tclook::GetIsa $obj]
+        dict set result isa S [GetIsa $obj]
         foreach key {class namespace} {
             dict set result $key S [info $type $key $obj]
         }
@@ -138,6 +117,12 @@ namespace eval ::tclook::Dict {
         dict set result name S $name
         dict set result args S [info args $name]
         dict set result body S [string trimright [::textutil::adjust::undent [info body $name]\x7f] \x7f]
+    }
+
+    proc GetIsa obj {
+        lmap i {class metaclass object} {
+            if {[info object isa $i $obj]} {set i} continue
+        }
     }
 
 }
@@ -320,27 +305,72 @@ namespace eval ::tclook::Pane {
         }
     }
 
-}
+    proc Open info {
+        if {$info eq {}} {
+            return
+        }
+        variable panes
+        lassign [dict get $info title] - title
+        if {![info exists panes($title)] || ![winfo exists $panes($title)]} {
+            set panes($title) [::tclook::Pane::GetPane $info]
+        }
+        # One way or another, we now have a window. Bring it up.
+        raise $panes($title)
+        focus $panes($title)
+    }
 
-proc ::tclook::OpenPane info {
-    variable wn
-    lassign [dict get $info title] - title
-    lassign [dict get $info type] - type
-    set w [toplevel .t[incr wn]]
-    wm minsize $w 270 200
-    wm title $w $title
-    set frame [ttk::frame $w.f]
-    pack $frame -expand yes -fill both
-    set pane [PaneMaker new $frame]
-    ::tclook::Pane $type $info $pane
-    catch { $pane destroy }
-    grid columnconfigure $frame 1 -weight 1
-    foreach ch [winfo children $frame] {
-        if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
-            $ch config -style $type.TLabel
+    proc GetPane info {
+        variable wn
+        lassign [dict get $info title] - title
+        lassign [dict get $info type] - type
+        set w [toplevel .t[incr wn]]
+        wm minsize $w 270 200
+        wm title $w $title
+        set frame [ttk::frame $w.f]
+        pack $frame -expand yes -fill both
+        set pane [PaneMaker new $frame]
+        ::tclook::Pane $type $info $pane
+        catch { $pane destroy }
+        grid columnconfigure $frame 1 -weight 1
+        foreach ch [winfo children $frame] {
+            if {[winfo class $ch] eq "TLabel" && [$ch cget -style] eq {}} {
+                $ch config -style $type.TLabel
+            }
+        }
+        return $w
+    }
+
+    oo::class create PaneMaker {
+        variable frame rownum
+        constructor args {
+            lassign $args frame
+        }
+        method add {key {val {}} args} {
+            incr rownum
+            set k [ttk::label $frame.k$rownum -text $key]
+            if {$val eq "-"} {
+                set v -
+            } else {
+                set v [ttk::label $frame.v$rownum -text $val]
+            }
+            grid $k $v -sticky ew
+            if {[llength $args] > 0} {
+                namespace eval ::tclook [linsert $args 1 $v]
+            }
+            return $v
         }
     }
-    return $w
+
+    proc Clear {} {
+        variable panes
+        destroy {*}[dict values [array get panes]]
+    }
+
+    proc Init {} {
+        variable panes
+        array set panes {}
+    }
+
 }
 
 namespace eval ::tclook::Page {
@@ -351,39 +381,43 @@ namespace eval ::tclook::Page {
     }
     namespace ensemble create -map $map
 
-    proc commandPage title {
-        namespace upvar ::tclook pInfo pInfo pWin pWin
-        if {[info exists pInfo] && [dict exists $pInfo $title]} {
-            set info [dict get $pInfo $title]
-            set info [dict map {- val} $info {lindex $val 1}]
-            dict with info {
-                $pWin.page delete 1.0 end
-                $pWin.page insert end "proc $name\n" heading1
-                $pWin.page insert end "proc $name {$args} {$body}"
-            }
+    proc commandPage info {
+        variable pWin
+        set info [dict map {- val} $info {lindex $val 1}]
+        dict with info {
+            $pWin.page delete 1.0 end
+            $pWin.page insert end "proc $name\n" heading1
+            $pWin.page insert end "proc $name {$args} {$body}"
         }
     }
 
-}
+    proc Open info {
+        if {$info eq {}} {
+            return
+        }
+        variable pWin
+        if {![winfo exists $pWin]} {
+            set pWin [toplevel .pwin]
+            text $pWin.page
+            pack $pWin.page -expand yes -fill both
+        }
+        variable pInfo
+        lassign [dict get $info title] - title
+        lassign [dict get $info type] - type
+        if {![dict exists $pInfo $title]} {
+            dict set pInfo $title [dict filter $info script {key -} {expr {$key ne "title"}}]
+        }
+        ${type}Page [dict get $pInfo $title]
+    }
 
-proc ::tclook::OpenPage info {
-    variable pWin
-    if {![info exists pWin]} {
+    proc Init {} {
+        variable pWin
+        catch { destroy $pWin }
         set pWin {}
+        unset -nocomplain pWin
+        variable pInfo {}
     }
-    if {![winfo exists $pWin]} {
-        set pWin [toplevel .pwin]
-        text $pWin.page
-        pack $pWin.page -expand yes -fill both
-    }
-    variable pInfo
-    if {![info exists pInfo]} {
-        set pInfo {}
-    }
-    lassign [dict get $info title] - title
-    if {![dict exists $pInfo $title]} {
-        dict set pInfo $title [dict filter $info script {key -} {expr {$key ne "title"}}]
-    }
+
 }
 
 proc ::tclook::BindMethod {w args} {
@@ -405,12 +439,6 @@ proc ::tclook::Bind {w {label wobj} {cursor hand2}} {
     }
 }
 
-proc ::tclook::GetIsa obj {
-    lmap i {class metaclass object} {
-        if {[info object isa $i $obj]} {set i} continue
-    }
-}
-
 proc ::tclook::IsPrivate {type obj m} {
     expr {$m ni [concat [info $type methods $obj] [info $type methods $obj -all]]}
 }
@@ -419,38 +447,14 @@ proc ::tclook::IsLocal {type obj m} {
     expr {$m in [concat [info $type methods $obj] [info $type methods $obj -private]]}
 }
 
-oo::class create ::tclook::PaneMaker {
-    variable frame rownum
-    constructor args {
-        lassign $args frame
-    }
-    method add {key {val {}} args} {
-        incr rownum
-        set k [ttk::label $frame.k$rownum -text $key]
-        if {$val eq "-"} {
-            set v -
-        } else {
-            set v [ttk::label $frame.v$rownum -text $val]
-        }
-        grid $k $v -sticky ew
-        if {[llength $args] > 0} {
-            namespace eval ::tclook [linsert $args 1 $v]
-        }
-        return $v
-    }
-}
-
 # TODO one-window version: as hypertext? 
 
 # TODO have Dict object/class gather up plain, -private, -all, and -private -all lists and add checkboxes to the frame to select which list to use instead of changing font
 
 proc ::tclook::Init {} {
     # TODO this method needs an overhaul
-    variable panes
-    array set panes {}
-    variable pWin
-    catch { destroy $pWin }
-    unset -nocomplain pWin
+    ::tclook::Pane::Init
+    ::tclook::Page::Init
     foreach {style color} {
         object wheat
         object00 wheat
@@ -502,7 +506,7 @@ cd ~/code/Modules/
 tcl::tm::path add topdir/lib/
 package require tclook
 ::log::lvSuppressLE i 0
-catch { ::tclook::PaneMaker destroy } ; ::tclook::clearAll ; package forget tclook ; package require tclook
+catch { ::tclook::Pane::PaneMaker destroy } ; ::tclook::clearAll ; package forget tclook ; package require tclook
 source -encoding utf-8 automaton-20180628-2.tcl
-::tclook::show oo::class ::tcl
+::tclook::show pane oo::class ::tcl
 
