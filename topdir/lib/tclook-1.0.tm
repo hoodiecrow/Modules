@@ -9,24 +9,21 @@ proc ::tclook::show args {
     # containing a list of information for it regarded as an object, a class, a
     # namespace, or a procedure.
     foreach name [lassign $args mode] {
+        set get ::tclook::[string totitle $mode]::get
         if {[namespace exists $name]} {
-            _$mode namespace $name
+            $get [list namespace $name]
         } else {
             set name [uplevel 1 [list namespace which $name]]
             if {[info object isa object $name]} {
-                _$mode object $name
+                $get [list object $name]
                 if {[info object isa class $name]} {
-                    _$mode class $name
+                    $get [list class $name]
                 }
             } else {
-                _$mode command $name
+                $get [list command $name]
             }
         }
     }
-}
-
-proc ::tclook::_pane args {
-    ::tclook::Pane::Open [Dict {*}$args]
 }
 
 proc ::tclook::_text args {
@@ -40,27 +37,25 @@ proc ::tclook::_text args {
     puts {}
 }
 
-proc ::tclook::_page args {
-    ::tclook::Page::Open [Dict {*}$args]
-}
-
 proc ::tclook::clearAll {} {
     # Close any still-open panes that have been opened by us.
     ::tclook::Pane::Clear
 }
 
 namespace eval ::tclook::Dict {
-    namespace export {[a-z]*}
-    variable map {}
-    foreach type {object class namespace method command} {
-        lappend map $type ${type}Dict
-    }
-    namespace ensemble create -map $map
 
-    proc objectDict obj {
-        set type object
+    proc get key {
+        variable infoDict
+        if {![dict exists $infoDict $key]} {
+            dict set infoDict $key [[lindex $key 0] $key]
+        }
+        dict get $infoDict $key
+    }
+
+    proc object key {
+        lassign $key type obj
         # TODO decide about other subcommands
-        dict set result title S "$type $obj"
+        dict set result title S $key
         dict set result type S $type
         dict set result name S $obj
         dict set result isa S [GetIsa $obj]
@@ -73,10 +68,10 @@ namespace eval ::tclook::Dict {
         dict set result methods L [info $type methods $obj -all -private]
     }
 
-    proc classDict obj {
-        set type class
+    proc class key {
+        lassign $key type obj
         # TODO decide about other subcommands
-        dict set result title S "$type $obj"
+        dict set result title S $key
         dict set result type S $type
         dict set result name S $obj
         dict set result superclass S [info $type superclass $obj]
@@ -86,20 +81,20 @@ namespace eval ::tclook::Dict {
         dict set result methods L [info $type methods $obj -all -private]
     }
 
-    proc namespaceDict obj {
-        set type namespace
-        dict set result title S "$type $obj"
+    proc namespace key {
+        lassign $key type obj
+        dict set result title S $key
         dict set result type S $type
         dict set result name S $obj
         dict set result vars L [info vars $obj\::*]
         dict set result procs L [info procs $obj\::*]
         dict set result commands L [info commands $obj\::*]
-        dict set result children L [namespace children $obj]
+        dict set result children L [::namespace children $obj]
     }
 
-    proc methodDict data {
-        set type method
-        dict set result title S [list $type $data]
+    proc method key {
+        lassign $key type data
+        dict set result title S $key
         dict set result type S $type
         # Note that type changes meaning here, from pane type to info subcommand name.
         lassign $data type obj name
@@ -110,9 +105,9 @@ namespace eval ::tclook::Dict {
         dict set result body S [string trimright [::textutil::adjust::undent $body\x7f] \x7f]
     }
 
-    proc commandDict name {
-        set type command
-        dict set result title S "$type $name"
+    proc command key {
+        lassign $key type name
+        dict set result title S $key
         dict set result type S $type
         dict set result name S $name
         dict set result args S [info args $name]
@@ -123,6 +118,10 @@ namespace eval ::tclook::Dict {
         lmap i {class metaclass object} {
             if {[info object isa $i $obj]} {set i} continue
         }
+    }
+
+    proc Init {} {
+        variable infoDict {}
     }
 
 }
@@ -213,6 +212,21 @@ namespace eval ::tclook::Pane {
         lappend map $type ${type}Pane
     }
     namespace ensemble create -map $map
+
+    proc get key {
+        variable panes
+        if {![info exists panes($key)] || ![winfo exists $panes($key)]} {
+            set w [::tclook::Pane::GetPane $key]
+            if {$w eq {}} {
+                # Fail quietly if no info found.
+                return
+            }
+            set panes($key) $w
+        }
+        # If we are still here, we now have a window. Bring it up.
+        raise $panes($key)
+        focus $panes($key)
+    }
 
     proc objectPane {info pane} {
         set type object
@@ -305,27 +319,17 @@ namespace eval ::tclook::Pane {
         }
     }
 
-    proc Open info {
+    proc GetPane key {
+        variable wn
+        set info [::tclook::Dict::get $key]
         if {$info eq {}} {
+            # Fail quietly if no info found.
             return
         }
-        variable panes
-        lassign [dict get $info title] - title
-        if {![info exists panes($title)] || ![winfo exists $panes($title)]} {
-            set panes($title) [::tclook::Pane::GetPane $info]
-        }
-        # One way or another, we now have a window. Bring it up.
-        raise $panes($title)
-        focus $panes($title)
-    }
-
-    proc GetPane info {
-        variable wn
-        lassign [dict get $info title] - title
-        lassign [dict get $info type] - type
+        lassign $key type
         set w [toplevel .t[incr wn]]
         wm minsize $w 270 200
-        wm title $w $title
+        wm title $w $key
         set frame [ttk::frame $w.f]
         pack $frame -expand yes -fill both
         set pane [PaneMaker new $frame]
@@ -361,14 +365,21 @@ namespace eval ::tclook::Pane {
         }
     }
 
-    proc Clear {} {
+    proc Clear {{pattern *}} {
         variable panes
-        destroy {*}[dict values [array get panes]]
+        foreach name [array names panes $pattern] {
+            destroy $panes($name)
+            array unset panes $name
+        }
     }
 
     proc Init {} {
         variable panes
-        array set panes {}
+        if {[info exists panes]} {
+            Clear
+        } else {
+            array set panes {}
+        }
     }
 
 }
@@ -428,7 +439,10 @@ proc ::tclook::BindMethod {w args} {
         set l [IsLocal {*}$args]
     }
     $w config -style [lindex $args 0]$p$l.TLabel
-    bind $w <1> [list ::tclook::_pane method $args]
+    if no {
+        bind $w <1> [list ::tclook::_pane method $args]
+    }
+    bind $w <1> [list ::tclook::Pane::get [list method $args]]
     $w config -cursor hand2
 }
 
@@ -453,6 +467,7 @@ proc ::tclook::IsLocal {type obj m} {
 
 proc ::tclook::Init {} {
     # TODO this method needs an overhaul
+    ::tclook::Dict::Init
     ::tclook::Pane::Init
     ::tclook::Page::Init
     foreach {style color} {
@@ -490,10 +505,10 @@ proc ::tclook::Init {} {
 
     bind wobjPopup <1> {::tclook::show pane [%W cget -text]}
     foreach tag {classPopup mixinsPopup superclassPopup} {
-        bind $tag <1> {::tclook::_pane class [%W cget -text]}
+        bind $tag <1> {::tclook::Pane::get [list class [%W cget -text]]}
     }
     foreach tag {namespace command} {
-        bind ${tag}Popup <1> [format {::tclook::_pane %s [%%W cget -text]} $tag]
+        bind ${tag}Popup <1> [format {::tclook::Pane::get [list %s [%%W cget -text]]} $tag]
     }
 }
 
