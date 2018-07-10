@@ -77,7 +77,7 @@ package require tclook
 package forget tclook ; package require tclook
 source -encoding utf-8 automaton-20180628-2.tcl
 catch { $m destroy }
-::struct::matrix m
+set m [::struct::matrix]
 $m add columns 18
 ::tclook::add $m object oo::class
 ::tclook::add $m class oo::class
