@@ -14,7 +14,7 @@ namespace eval tclook {}
 # superclass [link class $val]
 # namespace [link $key $val]
 # mixins [link class $val]
-# filters [link method [list $type $desc $val]]
+# filters NOT [link method [list $type $desc $val]]
 # variables
 # vars
 # instances [link class $val]
@@ -26,6 +26,8 @@ namespace eval tclook {}
 # children [link namespace $nsname]
 #
 
+# NOTE filters are methods, so don't link them from the filters field
+
 proc ::tclook::Init {} {
     variable keys {
         id isa class superclass namespace mixins filters variables vars
@@ -35,7 +37,6 @@ proc ::tclook::Init {} {
 
 proc ::tclook::add {m type desc} {
     variable keys
-    set methodlist {-all -private}
     set values [lmap key $keys {
         switch $key {
             id           { list $type $desc }
@@ -48,7 +49,7 @@ proc ::tclook::add {m type desc} {
             variables    { switch $type object - class { info $type $key $desc } }
             vars         { switch $type object { info $type $key $desc } namespace { info vars ${desc}::* } }
             instances    { switch $type class { info $type $key $desc } }
-            methods      { switch $type object - class { info $type $key $desc {*}$methodlist} }
+            methods      { switch $type object - class { GetMethods $type $desc } }
             methodtype   { switch $type method { info [lindex $desc 0] $key {*}[lrange $desc 1 end] } procedure { format proc }}
             definition   { switch $type method { info [lindex $desc 0] $key {*}[lrange $desc 1 end] } procedure { list [info args $desc] [info body $desc] } }
             procs        { switch $type namespace { info $key ${desc}::* } }
@@ -61,6 +62,13 @@ proc ::tclook::add {m type desc} {
     }]
     puts $values
     $m add row $values
+}
+
+proc ::tclook::GetMethods {type desc} {
+    # TODO change to return dict of name->bits where bits indicate
+    # membership in {{} -p -a} (all methods are members of {-p -a})
+    set methodlist {-all -private}
+    info $type methods $desc {*}$methodlist
 }
 
 proc ::tclook::GetIsa obj {
