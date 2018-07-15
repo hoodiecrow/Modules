@@ -16,19 +16,81 @@ proc ::tclook::Init {} {
     }
 }
 
+proc ::tclook::add {type desc} {
+    variable keys
+    set values [lmap key $keys {
+        switch $key {
+            id           { list $type $desc }
+            variables    { switch $type object - class { info $type $key $desc } }
+            methods      { switch $type object - class { GetMethods $type $desc } }
+            namespace    { switch $type object { info $type $key $desc } }
+            vars         { switch $type object { info $type $key $desc } namespace { info vars ${desc}::* } }
+            commands     { switch $type namespace { info $key ${desc}::* } }
+            class        { switch $type object { info $type $key $desc } }
+            superclasses { switch $type class { info $type $key $desc } }
+            subclasses   { switch $type class { info $type $key $desc } }
+            mixins       -
+            filters      -
+            instances    { switch $type class { info $type $key $desc } }
+            children     { switch $type namespace { namespace $key $desc } }
+            default {
+                ;
+            }
+        }
+    }]
+    return $values
+}
+
+proc ::tclook::GetMethods {type desc} {
+    log::log d [info level 0] 
+    set d {}
+    foreach method [info $type methods $desc -all -private] {
+        dict set minfo belongs 0
+        if {$method in [info $type methods $desc]} { dict incr minfo belongs }
+        if {$method in [info $type methods $desc -private]} { dict incr minfo belongs 2 }
+        if {$method in [info $type methods $desc -all]} { dict incr minfo belongs 4 }
+        dict lappend minfo signature { info [lindex $desc 0] methodtype {*}[lrange $desc 1 end] }
+        dict lappend minfo signature $method
+        dict lappend minfo signature [lindex [info [lindex $desc 0] definition {*}[lrange $desc 1 end]]]
+        dict set d $method
+    }
+    return $d
+}
+
+proc ::tclook::GetIsa obj {
+    lmap i {class metaclass object} {
+        if {[info object isa $i $obj]} {set i} continue
+    }
+}
+
+::tclook::Init
+
+return
+
+package require log
+cd ~/code/Modules/
+tcl::tm::path add topdir/lib/
+package require tclook
+::log::lvSuppressLE i 0
+package forget tclook ; package require tclook
+source -encoding utf-8 automaton-20180628-2.tcl
+::tclook::add object oo::class
+::tclook::add class oo::class
+::tclook::add namespace ::tcl 
+
 #
 #               O  C  N
 =======================
 id              1  1  1
-class           1
-namespace       1
-methods         1  1
 variables       1  1
+methods         1  1
+namespace       1
 vars            1  1  1
 commands              1
-mixins          1  1
+class           1
 superclasses       1
 subclasses         1
+mixins          1  1
 instances          1
 children              1
 #
@@ -84,20 +146,12 @@ proc ::tclook::add {m type desc} {
     $m add row $values
 }
 
-proc ::tclook::GetMethods {type desc} {
+proc ::tclook::__GetMethods {type desc} {
     # TODO change to return dict of name->bits where bits indicate
     # membership in {{} -p -a} (all methods are members of {-p -a})
     set methodlist {-all -private}
     info $type methods $desc {*}$methodlist
 }
-
-proc ::tclook::GetIsa obj {
-    lmap i {class metaclass object} {
-        if {[info object isa $i $obj]} {set i} continue
-    }
-}
-
-::tclook::Init
 
 return
 
