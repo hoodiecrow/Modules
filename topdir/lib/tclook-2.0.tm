@@ -42,17 +42,51 @@ proc ::tclook::add {type desc} {
 }
 
 proc ::tclook::GetMethods {type desc} {
+    log::log d -----------------------------
     log::log d [info level 0] 
     set d {}
-    foreach method [info $type methods $desc -all -private] {
-        dict set minfo belongs 0
-        if {$method in [info $type methods $desc]} { dict incr minfo belongs }
-        if {$method in [info $type methods $desc -private]} { dict incr minfo belongs 2 }
-        if {$method in [info $type methods $desc -all]} { dict incr minfo belongs 4 }
-        dict lappend minfo signature { info [lindex $desc 0] methodtype {*}[lrange $desc 1 end] }
-        dict lappend minfo signature $method
-        dict lappend minfo signature [lindex [info [lindex $desc 0] definition {*}[lrange $desc 1 end]]]
-        dict set d $method
+    set methods [info $type methods $desc]
+    log::log d --public--
+    log::log d $methods
+    foreach method $methods {
+        log::log d \$method=$method 
+        log::log d "call: [info $type call $desc $method]"
+        log::log d "mtyp: [info $type methodtype $desc $method]"
+        log::log d "args: [lindex [info $type definition $desc $method] 0]"
+    }
+    set methods [info $type methods $desc -private]
+    log::log d --private--
+    log::log d $methods
+    foreach method $methods {
+        if {$method ni [info $type methods $desc]} {
+            log::log d \$method=$method 
+            log::log d "call: [info $type call $desc $method]"
+            log::log d "mtyp: [info $type methodtype $desc $method]"
+            log::log d "args: [lindex [info $type definition $desc $method] 0]"
+        }
+        if no {
+            dict set minfo belongs 0
+            if {$method in [info $type methods $desc]} { dict incr minfo belongs }
+            if {$method in [info $type methods $desc -private]} { dict incr minfo belongs 2 }
+            if {$method ni [info $type methods $desc -all] && $method ni [info $type methods $desc ]} {
+                dict incr minfo belongs 4
+            } else {
+                dict lappend minfo signature [info $type methodtype $desc $method]
+                log::log d \$minfo=$minfo 
+                dict lappend minfo signature $method
+                log::log d [list info $type definition $desc $method]
+                dict lappend minfo signature [lindex [info $type definition $desc $method] 0]
+            }
+            dict set minfo call [info $type call $desc $method]
+            dict set d $method $minfo
+        }
+    }
+    set methods [info $type methods $desc -private -all]
+    log::log d --inherited--
+    log::log d $methods
+    foreach method $methods {
+        log::log d \$method=$method 
+        log::log d "call: [info $type call $desc $method]"
     }
     return $d
 }
@@ -74,6 +108,12 @@ package require tclook
 ::log::lvSuppressLE i 0
 package forget tclook ; package require tclook
 source -encoding utf-8 automaton-20180628-2.tcl
+oo::class create Foo {method foo {a b} {list $b $a}}
+oo::class create Bar {superclass Foo ; method Qux {} {my foo m n} ; method quux {} {my foo x y}}
+Foo create foo
+Bar create bar
+::tclook::GetMethods class ::Foo ; ::tclook::GetMethods object ::foo ; ::tclook::GetMethods class ::Bar ; ::tclook::GetMethods object ::bar
+
 ::tclook::add object oo::class
 ::tclook::add class oo::class
 ::tclook::add namespace ::tcl 
